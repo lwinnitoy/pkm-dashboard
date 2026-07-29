@@ -1,0 +1,47 @@
+"""FastAPI entrypoint: create tables, seed categories, register routers."""
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.config import get_settings
+from app.database import Base, SessionLocal, engine
+from app.models import Category
+from app.plaid_client import DEFAULT_CATEGORIES
+from app.routers import finance, plaid
+
+
+def _seed_categories() -> None:
+    with SessionLocal() as db:
+        existing = {c.name for c in db.query(Category).all()}
+        for name in DEFAULT_CATEGORIES:
+            if name not in existing:
+                db.add(Category(name=name))
+        db.commit()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    _seed_categories()
+    yield
+
+
+app = FastAPI(title="PKM Platform API", version="0.1.0", lifespan=lifespan)
+
+settings = get_settings()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[settings.frontend_origin],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(plaid.router)
+app.include_router(finance.router)
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "plaid_env": settings.plaid_env}

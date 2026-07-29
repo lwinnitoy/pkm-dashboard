@@ -1,0 +1,79 @@
+:root {
+  font-family: system-ui, -apple-system, sans-serif;
+  color: #1f2430;
+  background: #f5f6fa;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+
+.dashboard {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 24px 20px 64px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.topbar h1 { font-size: 1.6rem; margin: 0; }
+.actions { display: flex; gap: 8px; }
+
+button {
+  border: 1px solid #4f46e5;
+  background: #4f46e5;
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+button:disabled { opacity: 0.5; cursor: default; }
+
+.card {
+  background: #fff;
+  border: 1px solid #e6e8ef;
+  border-radius: 12px;
+  padding: 18px;
+  margin-bottom: 18px;
+}
+.card h2 { font-size: 1.1rem; margin: 0 0 12px; }
+
+.summary-head { display: flex; gap: 48px; margin-bottom: 12px; }
+.metric-label { font-size: 0.8rem; color: #6b7280; }
+.metric-value { font-size: 1.8rem; font-weight: 700; }
+
+.accounts { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.chip {
+  background: #eef0f7;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 0.85rem;
+}
+
+.banner {
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  color: #3730a3;
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+}
+
+.txn-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.txn-table th {
+  text-align: left;
+  color: #6b7280;
+  font-weight: 600;
+  border-bottom: 1px solid #e6e8ef;
+  padding: 8px 6px;
+}
+.txn-table td { padding: 8px 6px; border-bottom: 1px solid #f0f1f6; }
+.credit { color: #059669; }
+.pending { color: #b45309; font-size: 0.75rem; }
+.muted { color: #6b7280; }
+.error { color: #b91c1c; font-size: 0.85rem; }
