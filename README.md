@@ -66,6 +66,19 @@ institution.
 `sync` (cursor-based incremental fetch; Plaid returns `added`/`modified`/`removed`, so dedup
 is handled by the cursor rather than by us).
 
+## Connecting Wealthsimple / Canadian investment accounts
+
+Plaid supports Wealthsimple (Canada). Link is initialized with `transactions` as the
+primary product (so the institution list isn't over-filtered) and `investments` in
+`PLAID_ADDITIONAL_CONSENTED_PRODUCTS`, which captures investment consent *if* the
+institution supports it — without hiding institutions that don't. Requires
+`PLAID_ENV=production` (Wealthsimple isn't in Sandbox) and `CA` in `PLAID_COUNTRY_CODES`.
+
+What works today: the account links, balances and any **cash/spending transactions** sync
+through the existing `/transactions/sync` flow. What's **not** wired up yet: investment
+**holdings** and investment transactions (buys/sells/dividends) — those come from Plaid's
+`/investments/*` endpoints and a separate schema, tracked as a follow-up.
+
 ## Project layout
 
 - `backend/app/models.py` — `plaid_items`, `accounts`, `transactions`, `categories`

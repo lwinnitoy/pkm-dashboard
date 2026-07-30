@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     plaid_env: str = "sandbox"  # sandbox | production
     plaid_country_codes: str = "US,CA"
     plaid_products: str = "transactions"
+    # Consent-only products captured at Link time if the institution supports them,
+    # without filtering the institution list. Enables investment-heavy institutions
+    # like Wealthsimple to link and consent to investments data.
+    plaid_additional_consented_products: str = "investments"
 
     # Database
     database_url: str = "sqlite:///./pkm.db"
@@ -32,6 +36,14 @@ class Settings(BaseSettings):
     @property
     def product_list(self) -> list[str]:
         return [p.strip() for p in self.plaid_products.split(",") if p.strip()]
+
+    @property
+    def additional_consented_product_list(self) -> list[str]:
+        return [
+            p.strip()
+            for p in self.plaid_additional_consented_products.split(",")
+            if p.strip()
+        ]
 
 
 @lru_cache

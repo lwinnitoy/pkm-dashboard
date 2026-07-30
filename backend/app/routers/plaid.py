@@ -31,6 +31,11 @@ def create_link_token():
         language="en",
         user=LinkTokenCreateRequestUser(client_user_id="local-user"),
     )
+    # Consent-only products (e.g. investments for Wealthsimple): captured if the
+    # institution supports them, without filtering the institution list.
+    consented = settings.additional_consented_product_list
+    if consented:
+        request.additional_consented_products = [Products(p) for p in consented]
     try:
         response = client.link_token_create(request)
     except Exception as exc:  # surface Plaid errors to the client for debugging
