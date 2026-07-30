@@ -111,3 +111,63 @@ class PortfolioSummary(BaseModel):
     holdings_count: int
     by_account: list[AccountValue]
     top_holdings: list[PortfolioHolding]
+
+
+class TrendPoint(BaseModel):
+    period_start: date
+    spent: float
+    income: float
+
+
+class MerchantSpend(BaseModel):
+    merchant: str
+    total: float
+    count: int
+
+
+class CategoryComparison(BaseModel):
+    category: str
+    current: float
+    previous: float
+    pct_change: float | None  # None when previous was 0 (no baseline)
+
+
+class NetWorthPoint(BaseModel):
+    date: date
+    assets: float
+    liabilities: float
+    net_worth: float
+
+
+class GoalCreate(BaseModel):
+    name: str
+    target_amount: float
+    target_date: date
+    expected_annual_return: float = 0.06
+    monthly_contribution: float = 0.0
+
+
+class GoalUpdate(BaseModel):
+    name: str | None = None
+    target_amount: float | None = None
+    target_date: date | None = None
+    expected_annual_return: float | None = None
+    monthly_contribution: float | None = None
+
+
+class GoalOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    target_amount: float
+    target_date: date
+    expected_annual_return: float
+    monthly_contribution: float
+    # Computed projection fields (populated in routers/finance.py; default None so
+    # the model validates directly from the ORM row before projection is applied).
+    current_value: float | None = None            # from investments seam; None if unlinked
+    projected_value: float | None = None          # value at target_date given assumptions
+    gap: float | None = None                      # projected_value - target_amount
+    on_track: bool | None = None                  # projected_value >= target_amount
+    required_monthly_contribution: float | None = None  # PMT to exactly hit target

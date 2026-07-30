@@ -16,6 +16,7 @@ from app.database import get_db
 from app.models import Account, PlaidItem, Transaction
 from app.plaid_client import get_plaid_client, normalize_category
 from app.schemas import ExchangeTokenRequest, LinkTokenResponse, SyncResponse
+from app.snapshots import write_snapshots
 
 router = APIRouter(prefix="/api/plaid", tags=["plaid"])
 
@@ -133,6 +134,10 @@ def sync_transactions(db: Session = Depends(get_db)):
 
         item.transactions_cursor = cursor
         db.commit()
+
+    # Capture today's balances so net-worth history accrues on manual syncs too.
+    write_snapshots(db)
+    db.commit()
 
     return SyncResponse(**totals)
 

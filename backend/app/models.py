@@ -155,3 +155,39 @@ class InvestmentTransaction(Base):
 
     account: Mapped["Account"] = relationship(back_populates="investment_transactions")
     security: Mapped["Security"] = relationship()
+
+
+class BalanceSnapshot(Base):
+    """Daily point-in-time balance per account, so net worth can be charted over
+    time. Plaid only exposes *current* balance, so history accrues going forward."""
+
+    __tablename__ = "balance_snapshots"
+    __table_args__ = (
+        UniqueConstraint("account_id", "date", name="uq_snapshot_account_date"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
+    date: Mapped[date] = mapped_column(Date, index=True)
+    balance: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    account: Mapped["Account"] = relationship()
+
+
+class Goal(Base):
+    """A retirement/portfolio target: reach `target_amount` by `target_date`.
+
+    Current value is read live from the investments seam (get_portfolio_value),
+    not stored here — only the target and the projection assumptions live on the row.
+    """
+
+    __tablename__ = "goals"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String)
+    target_amount: Mapped[float] = mapped_column(Float)
+    target_date: Mapped[date] = mapped_column(Date)
+    # Assumptions driving the compound-growth projection.
+    expected_annual_return: Mapped[float] = mapped_column(Float, default=0.06)  # 0.06 = 6%/yr
+    monthly_contribution: Mapped[float] = mapped_column(Float, default=0.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)

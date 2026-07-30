@@ -77,3 +77,42 @@ button:disabled { opacity: 0.5; cursor: default; }
 .pending { color: #b45309; font-size: 0.75rem; }
 .muted { color: #6b7280; }
 .error { color: #b91c1c; font-size: 0.85rem; }
+
+/* Category comparison (month-over-month) */
+.comparison { margin-top: 14px; border-top: 1px solid #f0f1f6; padding-top: 12px; }
+.comparison-list { list-style: none; margin: 8px 0 0; padding: 0; font-size: 0.9rem; }
+.comparison-list li { display: flex; justify-content: space-between; padding: 4px 0; }
+.delta-up { color: #dc2626; font-size: 0.8rem; }
+.delta-down { color: #059669; font-size: 0.8rem; }
+
+/* Top merchants */
+.merchant-list { list-style: none; margin: 0; padding: 0; }
+.merchant-list li { margin-bottom: 12px; }
+.merchant-row { display: flex; justify-content: space-between; font-size: 0.9rem; }
+.merchant-name { font-weight: 600; }
+.merchant-bar-track { background: #eef0f7; border-radius: 999px; height: 8px; margin: 4px 0 2px; }
+.merchant-bar-fill { background: #4f46e5; height: 8px; border-radius: 999px; }
+.merchant-count { font-size: 0.75rem; }
+
+/* Goals */
+.goal { border-top: 1px solid #f0f1f6; padding-top: 14px; margin-top: 14px; }
+.goal-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+.goal-stats { display: flex; flex-wrap: wrap; gap: 28px; margin-bottom: 12px; }
+.goal-stats .metric-value { font-size: 1.2rem; }
+.badge-ok { color: #059669; font-weight: 700; }
+.badge-warn { color: #dc2626; font-weight: 700; }
+.goal-form { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 12px; }
+.goal-form label { display: flex; flex-direction: column; font-size: 0.8rem; color: #6b7280; gap: 4px; }
+.goal-form input {
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 0.9rem;
+}
+.link-danger {
+  background: none;
+  border: none;
+  color: #b91c1c;
+  padding: 0;
+  font-size: 0.85rem;
+}

@@ -35,6 +35,54 @@ export interface Account {
   currency: string | null;
 }
 
+export interface TrendPoint {
+  period_start: string;
+  spent: number;
+  income: number;
+}
+
+export interface MerchantSpend {
+  merchant: string;
+  total: number;
+  count: number;
+}
+
+export interface CategoryComparison {
+  category: string;
+  current: number;
+  previous: number;
+  pct_change: number | null;
+}
+
+export interface NetWorthPoint {
+  date: string;
+  assets: number;
+  liabilities: number;
+  net_worth: number;
+}
+
+export interface Goal {
+  id: number;
+  name: string;
+  target_amount: number;
+  target_date: string;
+  expected_annual_return: number;
+  monthly_contribution: number;
+  current_value: number | null;
+  projected_value: number | null;
+  gap: number | null;
+  on_track: boolean | null;
+  required_monthly_contribution: number | null;
+}
+
+export interface GoalInput {
+  name: string;
+  target_amount: number;
+  target_date: string;
+  expected_annual_return: number;
+  monthly_contribution: number;
+}
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     headers: { "Content-Type": "application/json" },
@@ -68,4 +116,35 @@ export const api = {
   summary: (period = 30) => req<Summary>(`/api/finance/summary?period=${period}`),
 
   accounts: () => req<Account[]>("/api/finance/accounts"),
+
+  spendingTrend: (period = 180, granularity: "day" | "week" | "month" = "month") =>
+    req<TrendPoint[]>(
+      `/api/finance/spending-trend?period=${period}&granularity=${granularity}`,
+    ),
+
+  topMerchants: (period = 30, limit = 10) =>
+    req<MerchantSpend[]>(`/api/finance/top-merchants?period=${period}&limit=${limit}`),
+
+  categoryComparison: (days = 30) =>
+    req<CategoryComparison[]>(`/api/finance/category-comparison?days=${days}`),
+
+  netWorth: (period = 180) =>
+    req<NetWorthPoint[]>(`/api/finance/net-worth?period=${period}`),
+
+  goals: () => req<Goal[]>("/api/finance/goals"),
+
+  createGoal: (goal: GoalInput) =>
+    req<Goal>("/api/finance/goals", {
+      method: "POST",
+      body: JSON.stringify(goal),
+    }),
+
+  updateGoal: (id: number, patch: Partial<GoalInput>) =>
+    req<Goal>(`/api/finance/goals/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
+
+  deleteGoal: (id: number) =>
+    req<void>(`/api/finance/goals/${id}`, { method: "DELETE" }),
 };
