@@ -22,16 +22,24 @@ the same foundation.
 
 ### Backend
 
+> ⚠️ **This project lives in iCloud Drive. Do NOT put the virtualenv inside the
+> project folder.** iCloud syncing the venv's thousands of dependency files makes
+> imports hang indefinitely. Keep the venv on local disk (e.g. `~/.venvs/...`).
+> Your app source can stay in iCloud — it's small and imports fine.
+
 ```bash
+# Create the venv OUTSIDE iCloud (local disk):
+python3 -m venv ~/.venvs/pkm-platform
+~/.venvs/pkm-platform/bin/pip install -r backend/requirements.txt
+
 cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env          # then paste your PLAID_CLIENT_ID / PLAID_SECRET
-uvicorn app.main:app --reload # http://localhost:8000  (docs at /docs)
+cp .env.example .env                              # paste your PLAID_CLIENT_ID / PLAID_SECRET
+~/.venvs/pkm-platform/bin/uvicorn app.main:app    # http://localhost:8000  (docs at /docs)
 ```
 
-The SQLite DB (`pkm.db`) and category seed data are created automatically on first boot.
+Tip: `source ~/.venvs/pkm-platform/bin/activate` first, then you can just run
+`uvicorn app.main:app`. The SQLite DB (`pkm.db`) and category seed data are created
+automatically on first boot.
 
 ### Frontend
 
@@ -67,7 +75,8 @@ is handled by the cursor rather than by us).
 
 ## Roadmap / hardening TODOs
 
-- Encrypt `access_token` at rest before any real hosting.
+- ~~Encrypt `access_token` at rest~~ ✅ done — Fernet-encrypted via `EncryptedString`
+  (`app/crypto.py`); requires `SECRET_ENCRYPTION_KEY` in `.env`.
 - Scheduled background sync (APScheduler) — currently manual via "Sync now".
 - Docker Compose + hosting.
 - Future modules: tasks, subscriptions engine, calendar sync.

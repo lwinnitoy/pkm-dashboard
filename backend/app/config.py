@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "sqlite:///./pkm.db"
 
+    # Fernet key for encrypting secrets at rest (Plaid access_tokens).
+    secret_encryption_key: str = ""
+
     # CORS
     frontend_origin: str = "http://localhost:5173"
 

@@ -4,6 +4,7 @@ from datetime import date, datetime, timezone
 from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.crypto import EncryptedString
 from app.database import Base
 
 
@@ -18,7 +19,7 @@ class PlaidItem(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     item_id: Mapped[str] = mapped_column(String, unique=True, index=True)
-    access_token: Mapped[str] = mapped_column(String)  # TODO: encrypt at rest before hosting
+    access_token: Mapped[str] = mapped_column(EncryptedString)  # encrypted at rest (Fernet)
     institution_name: Mapped[str | None] = mapped_column(String, nullable=True)
     transactions_cursor: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
