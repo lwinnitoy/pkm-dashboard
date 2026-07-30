@@ -74,16 +74,23 @@ primary product (so the institution list isn't over-filtered) and `investments` 
 institution supports it — without hiding institutions that don't. Requires
 `PLAID_ENV=production` (Wealthsimple isn't in Sandbox) and `CA` in `PLAID_COUNTRY_CODES`.
 
-What works today: the account links, balances and any **cash/spending transactions** sync
-through the existing `/transactions/sync` flow. What's **not** wired up yet: investment
-**holdings** and investment transactions (buys/sells/dividends) — those come from Plaid's
-`/investments/*` endpoints and a separate schema, tracked as a follow-up.
+Cash/spending transactions sync through `/transactions/sync`; investment **holdings** and
+investment transactions (buys/sells/dividends) sync through the **investments module**
+(`/api/investments/*`, backed by Plaid's `/investments/holdings/get` and
+`/investments/transactions/get`). Endpoints:
+
+- `POST /api/investments/sync` — best-effort per item (items without investment accounts
+  are skipped, not errored); upserts securities/holdings/transactions (idempotent).
+- `GET /api/investments/holdings` — current positions with security + account info.
+- `GET /api/investments/transactions` — paginated investment transactions.
+- `GET /api/investments/portfolio` — total value, value by account, top holdings.
 
 ## Project layout
 
 - `backend/app/models.py` — `plaid_items`, `accounts`, `transactions`, `categories`
 - `backend/app/routers/plaid.py` — link / exchange / sync
-- `backend/app/routers/finance.py` — dashboard read endpoints
+- `backend/app/routers/finance.py` — spending dashboard read endpoints
+- `backend/app/routers/investments.py` — investments sync + holdings/portfolio endpoints
 - `frontend/src/` — `api/` client, `components/`, `pages/Dashboard.tsx`
 
 ## Roadmap / hardening TODOs

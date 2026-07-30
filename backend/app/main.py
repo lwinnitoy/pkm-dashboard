@@ -8,7 +8,7 @@ from app.config import get_settings
 from app.database import Base, SessionLocal, engine
 from app.models import Category
 from app.plaid_client import DEFAULT_CATEGORIES
-from app.routers import finance, plaid
+from app.routers import finance, investments, plaid
 
 
 def _seed_categories() -> None:
@@ -40,6 +40,7 @@ app.add_middleware(
 
 app.include_router(plaid.router)
 app.include_router(finance.router)
+app.include_router(investments.router)
 
 
 @app.get("/health")

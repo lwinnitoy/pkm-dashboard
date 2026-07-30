@@ -1,7 +1,16 @@
 """ORM models. Finance tables stand alone for v1 but leave room for future modules."""
 from datetime import date, datetime, timezone
 
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, String, func
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.crypto import EncryptedString
@@ -46,6 +55,12 @@ class Account(Base):
     transactions: Mapped[list["Transaction"]] = relationship(
         back_populates="account", cascade="all, delete-orphan"
     )
+    holdings: Mapped[list["Holding"]] = relationship(
+        back_populates="account", cascade="all, delete-orphan"
+    )
+    investment_transactions: Mapped[list["InvestmentTransaction"]] = relationship(
+        back_populates="account", cascade="all, delete-orphan"
+    )
 
 
 class Transaction(Base):
@@ -74,3 +89,69 @@ class Category(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String, unique=True)
+
+
+# ---- Investments (holdings + investment transactions, e.g. Wealthsimple) ----
+
+
+class Security(Base):
+    """A tradable instrument (stock, ETF, etc.) referenced by holdings/txns."""
+
+    __tablename__ = "securities"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    plaid_security_id: Mapped[str] = mapped_column(String, unique=True, index=True)
+    ticker_symbol: Mapped[str | None] = mapped_column(String, nullable=True)
+    name: Mapped[str | None] = mapped_column(String, nullable=True)
+    type: Mapped[str | None] = mapped_column(String, nullable=True)
+    close_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    close_price_as_of: Mapped[date | None] = mapped_column(Date, nullable=True)
+    currency: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class Holding(Base):
+    """Current position of a security within an investment account (point-in-time)."""
+
+    __tablename__ = "holdings"
+    __table_args__ = (UniqueConstraint("account_id", "security_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"))
+    security_id: Mapped[int] = mapped_column(ForeignKey("securities.id"))
+    quantity: Mapped[float | None] = mapped_column(Float, nullable=True)
+    institution_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    institution_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cost_basis: Mapped[float | None] = mapped_column(Float, nullable=True)
+    currency: Mapped[str | None] = mapped_column(String, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+    account: Mapped["Account"] = relationship(back_populates="holdings")
+    security: Mapped["Security"] = relationship()
+
+
+class InvestmentTransaction(Base):
+    """A buy/sell/dividend/fee/transfer within an investment account."""
+
+    __tablename__ = "investment_transactions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"))
+    security_id: Mapped[int | None] = mapped_column(
+        ForeignKey("securities.id"), nullable=True
+    )
+    plaid_investment_transaction_id: Mapped[str] = mapped_column(
+        String, unique=True, index=True
+    )
+    date: Mapped[date] = mapped_column(Date, index=True)
+    name: Mapped[str | None] = mapped_column(String, nullable=True)
+    quantity: Mapped[float | None] = mapped_column(Float, nullable=True)
+    amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fees: Mapped[float | None] = mapped_column(Float, nullable=True)
+    type: Mapped[str | None] = mapped_column(String, index=True)
+    subtype: Mapped[str | None] = mapped_column(String, nullable=True)
+    currency: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+    account: Mapped["Account"] = relationship(back_populates="investment_transactions")
+    security: Mapped["Security"] = relationship()
