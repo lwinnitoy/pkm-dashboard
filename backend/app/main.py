@@ -9,6 +9,7 @@ from app.database import Base, SessionLocal, engine
 from app.models import Category
 from app.plaid_client import DEFAULT_CATEGORIES
 from app.routers import finance, plaid
+from app.scheduler import shutdown_scheduler, start_scheduler
 
 
 def _seed_categories() -> None:
@@ -24,7 +25,11 @@ def _seed_categories() -> None:
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     _seed_categories()
-    yield
+    start_scheduler()
+    try:
+        yield
+    finally:
+        shutdown_scheduler()
 
 
 app = FastAPI(title="PKM Platform API", version="0.1.0", lifespan=lifespan)

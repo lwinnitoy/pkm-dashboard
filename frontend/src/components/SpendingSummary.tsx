@@ -1,7 +1,13 @@
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import type { Summary } from "../api/client";
+import type { CategoryComparison, Summary } from "../api/client";
 
-export default function SpendingSummary({ summary }: { summary: Summary }) {
+export default function SpendingSummary({
+  summary,
+  comparison = [],
+}: {
+  summary: Summary;
+  comparison?: CategoryComparison[];
+}) {
   return (
     <section className="card">
       <div className="summary-head">
@@ -26,6 +32,28 @@ export default function SpendingSummary({ summary }: { summary: Summary }) {
               <Bar dataKey="total" fill="#4f46e5" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
+        </div>
+      )}
+
+      {comparison.length > 0 && (
+        <div className="comparison">
+          <div className="metric-label">vs. previous period</div>
+          <ul className="comparison-list">
+            {comparison.slice(0, 6).map((c) => (
+              <li key={c.category}>
+                <span>{c.category}</span>
+                <span>
+                  ${c.current.toFixed(0)}
+                  {c.pct_change != null && (
+                    <span className={c.pct_change > 0 ? "delta-up" : "delta-down"}>
+                      {" "}
+                      {c.pct_change > 0 ? "▲" : "▼"} {Math.abs(c.pct_change)}%
+                    </span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </section>
