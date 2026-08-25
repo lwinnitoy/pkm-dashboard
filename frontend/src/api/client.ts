@@ -61,6 +61,26 @@ export interface NetWorthPoint {
   net_worth: number;
 }
 
+export interface AccountValue {
+  account_id: number;
+  account_name: string | null;
+  value: number;
+}
+
+export interface PortfolioHolding {
+  ticker: string | null;
+  security_name: string | null;
+  value: number;
+}
+
+export interface PortfolioSummary {
+  // total_value can be null per the app contract ("no investments linked").
+  total_value: number | null;
+  holdings_count: number;
+  by_account: AccountValue[];
+  top_holdings: PortfolioHolding[];
+}
+
 export interface Goal {
   id: number;
   name: string;
@@ -130,6 +150,9 @@ export const api = {
 
   netWorth: (period = 180) =>
     req<NetWorthPoint[]>(`/api/finance/net-worth?period=${period}`),
+
+  investmentsPortfolio: () =>
+    req<PortfolioSummary>("/api/investments/portfolio"),
 
   goals: () => req<Goal[]>("/api/finance/goals"),
 

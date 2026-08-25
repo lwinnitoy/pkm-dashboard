@@ -8,9 +8,34 @@
 body { margin: 0; }
 
 .dashboard {
-  max-width: 900px;
+  max-width: 1280px;
   margin: 0 auto;
   padding: 24px 20px 64px;
+}
+
+/* Responsive card grid: two columns on wide screens, one on narrow. */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+/* Cards use margin-bottom for the stacked layout; inside the grid the gap
+   handles spacing, so cancel it to keep rows aligned. */
+.dashboard-grid > .card,
+.dashboard-grid > * > .card,
+.dashboard-grid > * {
+  margin-bottom: 0;
+}
+/* Wide items (goals, transactions) span the full row. */
+.grid-span-full {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 860px) {
+  .dashboard-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .topbar {
@@ -45,6 +70,15 @@ button:disabled { opacity: 0.5; cursor: default; }
 .summary-head { display: flex; gap: 48px; margin-bottom: 12px; }
 .metric-label { font-size: 0.8rem; color: #6b7280; }
 .metric-value { font-size: 1.8rem; font-weight: 700; }
+
+/* Overview (spending / income / investments) */
+.overview-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 48px;
+  margin-bottom: 12px;
+}
+.overview-connect { font-size: 1rem; font-weight: 600; }
 
 .accounts { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
 .chip {

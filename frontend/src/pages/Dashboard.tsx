@@ -7,10 +7,12 @@ import {
   type GoalInput,
   type MerchantSpend,
   type NetWorthPoint,
+  type PortfolioSummary,
   type Summary,
   type Transaction,
   type TrendPoint,
 } from "../api/client";
+import FinancialOverview from "../components/FinancialOverview";
 import GoalsCard from "../components/GoalsCard";
 import NetWorthChart from "../components/NetWorthChart";
 import PlaidLinkButton from "../components/PlaidLinkButton";
@@ -28,6 +30,7 @@ export default function Dashboard() {
   const [comparison, setComparison] = useState<CategoryComparison[]>([]);
   const [netWorth, setNetWorth] = useState<NetWorthPoint[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [portfolio, setPortfolio] = useState<PortfolioSummary | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -53,6 +56,14 @@ export default function Dashboard() {
       setGoals(g);
     } catch (e) {
       setMessage(String(e));
+    }
+
+    // Investments are optional (may be unlinked/empty) — isolate so a failure
+    // here never breaks the rest of the dashboard.
+    try {
+      setPortfolio(await api.investmentsPortfolio());
+    } catch {
+      setPortfolio(null);
     }
   }, []);
 
@@ -84,6 +95,9 @@ export default function Dashboard() {
     await refresh();
   };
 
+  const overviewSpending = summary?.total_spent ?? trend.reduce((sum, p) => sum + p.spent, 0);
+  const overviewIncome = trend.reduce((sum, p) => sum + p.income, 0);
+
   return (
     <div className="dashboard">
       <header className="topbar">
@@ -109,20 +123,30 @@ export default function Dashboard() {
         </div>
       )}
 
-      <GoalsCard goals={goals} onCreate={handleCreateGoal} onDelete={handleDeleteGoal} />
+      <FinancialOverview
+        spending={overviewSpending}
+        income={overviewIncome}
+        portfolio={portfolio}
+      />
 
-      <NetWorthChart data={netWorth} />
+      <div className="dashboard-grid">
+        <div className="grid-span-full">
+          <GoalsCard goals={goals} onCreate={handleCreateGoal} onDelete={handleDeleteGoal} />
+        </div>
 
-      {summary && <SpendingSummary summary={summary} comparison={comparison} />}
+        <NetWorthChart data={netWorth} />
 
-      <SpendingTrendChart data={trend} />
+        <SpendingTrendChart data={trend} />
 
-      <TopMerchants data={merchants} />
+        {summary && <SpendingSummary summary={summary} comparison={comparison} />}
 
-      <section className="card">
-        <h2>Recent transactions</h2>
-        <TransactionsTable transactions={transactions} />
-      </section>
+        <TopMerchants data={merchants} />
+
+        <section className="card grid-span-full">
+          <h2>Recent transactions</h2>
+          <TransactionsTable transactions={transactions} />
+        </section>
+      </div>
     </div>
   );
 }
