@@ -23,7 +23,11 @@ def _seed_categories() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
+    # SQLite (local dev) bootstraps its schema on boot for zero setup. Postgres
+    # (cloud) is migration-managed: run `alembic upgrade head` on deploy instead,
+    # so create_all never races or drifts from the migration history.
+    if engine.dialect.name == "sqlite":
+        Base.metadata.create_all(bind=engine)
     _seed_categories()
     start_scheduler()
     try:
