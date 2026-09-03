@@ -15,6 +15,13 @@ const PATHS: Record<string, React.ReactNode> = {
     </>
   ),
   transactions: <path d="M4 7h16M4 12h16M4 17h10" />,
+  budgets: (
+    <>
+      <rect x="3" y="5" width="14" height="3" rx="1.5" />
+      <rect x="3" y="10.5" width="18" height="3" rx="1.5" />
+      <rect x="3" y="16" width="9" height="3" rx="1.5" />
+    </>
+  ),
   investments: (
     <>
       <circle cx="12" cy="12" r="8.5" />

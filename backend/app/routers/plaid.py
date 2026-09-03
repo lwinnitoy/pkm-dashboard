@@ -11,6 +11,7 @@ from plaid.model.products import Products
 from plaid.model.transactions_sync_request import TransactionsSyncRequest
 from sqlalchemy.orm import Session
 
+from app.categorization import rule_category
 from app.config import get_settings
 from app.database import get_db
 from app.models import Account, PlaidItem, Transaction
@@ -149,6 +150,11 @@ def _upsert_transaction(db: Session, txn) -> None:
 
     pfc = getattr(txn, "personal_finance_category", None)
     primary = pfc.primary if pfc else None
+    merchant = getattr(txn, "merchant_name", None)
+
+    # A user's merchant rule wins over Plaid's category so overrides survive sync.
+    override = rule_category(db, merchant, txn.name)
+    category = override or normalize_category(primary)
 
     existing = (
         db.query(Transaction)
@@ -159,10 +165,10 @@ def _upsert_transaction(db: Session, txn) -> None:
         account_id=account.id,
         date=txn.date,
         name=txn.name,
-        merchant_name=getattr(txn, "merchant_name", None),
+        merchant_name=merchant,
         amount=txn.amount,
         currency=txn.iso_currency_code,
-        category=normalize_category(primary),
+        category=category,
         plaid_category=primary,
         pending=bool(txn.pending),
     )

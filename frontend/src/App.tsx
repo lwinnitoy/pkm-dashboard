@@ -3,6 +3,7 @@ import "./App.css";
 import AppShell from "./components/layout/AppShell";
 import { FinanceProvider } from "./data/FinanceProvider";
 import Accounts from "./pages/Accounts";
+import Budgets from "./pages/Budgets";
 import CashFlow from "./pages/CashFlow";
 import Goals from "./pages/Goals";
 import Investments from "./pages/Investments";
@@ -18,6 +19,7 @@ export default function App() {
           <Route element={<AppShell />}>
             <Route index element={<Overview />} />
             <Route path="cash-flow" element={<CashFlow />} />
+            <Route path="budgets" element={<Budgets />} />
             <Route path="transactions" element={<Transactions />} />
             <Route path="investments" element={<Investments />} />
             <Route path="net-worth" element={<NetWorth />} />

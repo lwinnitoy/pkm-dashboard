@@ -35,11 +35,12 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const [netWorth, setNetWorth] = useState<NetWorthPoint[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [portfolio, setPortfolio] = useState<PortfolioSummary | null>(null);
+  const [categories, setCategories] = useState<string[]>([]);
 
   const refresh = useCallback(async () => {
     setError(null);
     try {
-      const [s, t, a, tr, m, c, nw, g] = await Promise.all([
+      const [s, t, a, tr, m, c, nw, g, cats] = await Promise.all([
         api.summary(range),
         api.transactions(100),
         api.accounts(),
@@ -48,6 +49,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         api.categoryComparison(range),
         api.netWorth(range),
         api.goals(),
+        api.categories(),
       ]);
       setSummary(s);
       setTransactions(t);
@@ -57,6 +59,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       setComparison(c);
       setNetWorth(nw);
       setGoals(g);
+      setCategories(cats);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -89,6 +92,14 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       setSyncing(false);
     }
   }, [refresh]);
+
+  const recategorize = useCallback(
+    async (id: number, category: string) => {
+      await api.recategorize(id, category);
+      await refresh(); // a merchant rule can reassign several transactions
+    },
+    [refresh],
+  );
 
   const createGoal = useCallback(
     async (g: GoalInput) => {
@@ -124,8 +135,10 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         netWorth,
         goals,
         portfolio,
+        categories,
         refresh,
         sync,
+        recategorize,
         createGoal,
         deleteGoal,
       }}

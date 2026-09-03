@@ -44,9 +44,11 @@ export interface FinanceContextValue {
   netWorth: NetWorthPoint[];
   goals: Goal[];
   portfolio: PortfolioSummary | null;
+  categories: string[];
 
   refresh: () => Promise<void>;
   sync: () => Promise<void>;
+  recategorize: (id: number, category: string) => Promise<void>;
   createGoal: (g: GoalInput) => Promise<void>;
   deleteGoal: (id: number) => Promise<void>;
 }

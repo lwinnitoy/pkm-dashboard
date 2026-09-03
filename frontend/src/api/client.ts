@@ -107,6 +107,28 @@ export interface InvestmentTransaction {
   currency: string | null;
 }
 
+export interface Budget {
+  id: number;
+  category: string;
+  monthly_limit: number;
+}
+
+export interface BudgetStatusItem {
+  budget_id: number | null;
+  category: string;
+  limit: number | null;
+  spent: number;
+  remaining: number | null;
+  pct: number | null;
+}
+
+export interface BudgetStatus {
+  month: string;
+  total_limit: number;
+  total_spent: number;
+  items: BudgetStatusItem[];
+}
+
 export interface Goal {
   id: number;
   name: string;
@@ -158,6 +180,26 @@ export const api = {
 
   transactions: (limit = 50) =>
     req<Transaction[]>(`/api/finance/transactions?limit=${limit}`),
+
+  recategorize: (id: number, category: string) =>
+    req<Transaction>(`/api/finance/transactions/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ category }),
+    }),
+
+  categories: () => req<string[]>("/api/finance/categories"),
+
+  budgetStatus: (month?: string) =>
+    req<BudgetStatus>(`/api/finance/budgets/status${month ? `?month=${month}` : ""}`),
+
+  upsertBudget: (category: string, monthly_limit: number) =>
+    req<Budget>("/api/finance/budgets", {
+      method: "POST",
+      body: JSON.stringify({ category, monthly_limit }),
+    }),
+
+  deleteBudget: (id: number) =>
+    req<void>(`/api/finance/budgets/${id}`, { method: "DELETE" }),
 
   summary: (period = 30) => req<Summary>(`/api/finance/summary?period=${period}`),
 

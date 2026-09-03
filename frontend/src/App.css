@@ -465,6 +465,106 @@
   color: var(--text-subtle);
 }
 
+/* Inline category editor */
+.cat-select {
+  border: 1px solid var(--border);
+  background: var(--surface-muted);
+  border-radius: var(--radius-pill);
+  padding: 3px 8px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-family: inherit;
+  cursor: pointer;
+  max-width: 170px;
+}
+.cat-select:hover {
+  border-color: var(--border-strong);
+}
+
+/* ============================================================
+   Budgets
+   ============================================================ */
+.month-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.month-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.month-nav .btn {
+  padding: 4px 12px;
+}
+.month-label {
+  font-size: 1.05rem;
+  font-weight: 650;
+  min-width: 150px;
+  text-align: center;
+}
+.month-totals {
+  display: flex;
+  gap: 32px;
+}
+
+.budget-row {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.budget-row:last-child {
+  border-bottom: none;
+}
+.budget-row-head,
+.budget-row-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.budget-row-head {
+  margin-bottom: 8px;
+}
+.budget-row-foot {
+  margin-top: 6px;
+  font-size: 0.82rem;
+}
+.budget-row .bar-track {
+  height: 9px;
+}
+.budget-row .bar-fill {
+  height: 9px;
+}
+.budget-edit {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.budget-edit input {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  font-size: 0.85rem;
+  width: 110px;
+}
+.budget-edit .btn {
+  padding: 5px 12px;
+}
+.budget-actions {
+  display: flex;
+  gap: 14px;
+}
+.link-plain {
+  background: none;
+  border: none;
+  color: var(--brand);
+  padding: 0;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
 /* ============================================================
    Goals
    ============================================================ */

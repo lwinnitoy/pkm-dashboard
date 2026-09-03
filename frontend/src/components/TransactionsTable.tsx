@@ -2,10 +2,45 @@ import type { Transaction } from "../api/client";
 import { currency, shortDate } from "../lib/format";
 import { EmptyState } from "./ui";
 
+function CategoryCell({
+  txn,
+  categories,
+  onRecategorize,
+}: {
+  txn: Transaction;
+  categories?: string[];
+  onRecategorize?: (id: number, category: string) => void;
+}) {
+  if (!categories || !onRecategorize) {
+    return <span className="tag">{txn.category ?? "Uncategorized"}</span>;
+  }
+  const current = txn.category ?? "Uncategorized";
+  const options = Array.from(new Set([current, ...categories]));
+  return (
+    <select
+      className="cat-select"
+      value={current}
+      onChange={(e) => {
+        if (e.target.value !== current) onRecategorize(txn.id, e.target.value);
+      }}
+    >
+      {options.map((c) => (
+        <option key={c} value={c}>
+          {c}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 export default function TransactionsTable({
   transactions,
+  categories,
+  onRecategorize,
 }: {
   transactions: Transaction[];
+  categories?: string[];
+  onRecategorize?: (id: number, category: string) => void;
 }) {
   if (transactions.length === 0) {
     return <EmptyState>No transactions yet. Connect a bank and hit “Sync now”.</EmptyState>;
@@ -31,7 +66,7 @@ export default function TransactionsTable({
                 {t.pending && <span className="pending">pending</span>}
               </td>
               <td>
-                <span className="tag">{t.category ?? "Uncategorized"}</span>
+                <CategoryCell txn={t} categories={categories} onRecategorize={onRecategorize} />
               </td>
               <td className={`num ${income ? "amt-in" : "amt-out"}`}>
                 {income ? "+" : ""}

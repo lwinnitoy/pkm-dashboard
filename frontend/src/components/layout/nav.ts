@@ -2,6 +2,7 @@
 export const NAV = [
   { to: "/", label: "Overview", icon: "overview", end: true },
   { to: "/cash-flow", label: "Cash Flow", icon: "cashflow", end: false },
+  { to: "/budgets", label: "Budgets", icon: "budgets", end: false },
   { to: "/transactions", label: "Transactions", icon: "transactions", end: false },
   { to: "/investments", label: "Investments", icon: "investments", end: false },
   { to: "/net-worth", label: "Net Worth", icon: "networth", end: false },

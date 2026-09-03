@@ -8,7 +8,7 @@ from app.config import get_settings
 from app.database import Base, SessionLocal, engine
 from app.models import Category
 from app.plaid_client import DEFAULT_CATEGORIES
-from app.routers import finance, investments, plaid
+from app.routers import budgets, finance, investments, plaid
 from app.scheduler import shutdown_scheduler, start_scheduler
 
 
@@ -49,6 +49,7 @@ app.add_middleware(
 
 app.include_router(plaid.router)
 app.include_router(finance.router)
+app.include_router(budgets.router)
 app.include_router(investments.router)
 
 
