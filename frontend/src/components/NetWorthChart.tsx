@@ -1,43 +1,65 @@
 import {
+  Area,
+  AreaChart,
   CartesianGrid,
-  Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 import type { NetWorthPoint } from "../api/client";
+import { CHART } from "../lib/charts";
+import { currency, currencyCompact, shortDate } from "../lib/format";
+import { EmptyState } from "./ui";
 
 export default function NetWorthChart({ data }: { data: NetWorthPoint[] }) {
+  if (data.length === 0) {
+    return (
+      <EmptyState>
+        Net worth is tracked from daily balance snapshots — this chart fills in as they
+        accrue (a snapshot is taken on each sync and once daily).
+      </EmptyState>
+    );
+  }
   return (
-    <section className="card">
-      <h2>Net worth</h2>
-      {data.length === 0 ? (
-        <p className="muted">
-          Net worth is tracked from daily balance snapshots — this chart fills in as
-          they accrue (a snapshot is taken on each sync and once daily).
-        </p>
-      ) : (
-        <div style={{ width: "100%", height: 260 }}>
-          <ResponsiveContainer>
-            <LineChart data={data} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} />
-              <Tooltip formatter={(v) => `$${Number(v).toFixed(2)}`} />
-              <Line
-                type="monotone"
-                dataKey="net_worth"
-                name="Net worth"
-                stroke="#4f46e5"
-                strokeWidth={2}
-                dot={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-    </section>
+    <div className="chart chart-260">
+      <ResponsiveContainer>
+        <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 4, left: 8 }}>
+          <defs>
+            <linearGradient id="nwFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={CHART.brand} stopOpacity={0.22} />
+              <stop offset="100%" stopColor={CHART.brand} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid stroke={CHART.grid} vertical={false} />
+          <XAxis
+            dataKey="date"
+            tickFormatter={shortDate}
+            tick={{ fontSize: 11 }}
+            tickLine={false}
+            axisLine={false}
+            minTickGap={28}
+          />
+          <YAxis
+            tickFormatter={currencyCompact}
+            tick={{ fontSize: 11 }}
+            tickLine={false}
+            axisLine={false}
+            width={54}
+          />
+          <Tooltip
+            formatter={(v) => [currency(Number(v)), "Net worth"]}
+            labelFormatter={(l) => shortDate(String(l))}
+          />
+          <Area
+            type="monotone"
+            dataKey="net_worth"
+            stroke={CHART.brand}
+            strokeWidth={2}
+            fill="url(#nwFill)"
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
   );
 }

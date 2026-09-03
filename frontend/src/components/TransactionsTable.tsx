@@ -1,34 +1,45 @@
 import type { Transaction } from "../api/client";
+import { currency, shortDate } from "../lib/format";
+import { EmptyState } from "./ui";
 
-export default function TransactionsTable({ transactions }: { transactions: Transaction[] }) {
+export default function TransactionsTable({
+  transactions,
+}: {
+  transactions: Transaction[];
+}) {
   if (transactions.length === 0) {
-    return <p className="muted">No transactions yet. Connect a bank and hit “Sync now”.</p>;
+    return <EmptyState>No transactions yet. Connect a bank and hit “Sync now”.</EmptyState>;
   }
-
   return (
-    <table className="txn-table">
+    <table className="table">
       <thead>
         <tr>
           <th>Date</th>
           <th>Description</th>
           <th>Category</th>
-          <th style={{ textAlign: "right" }}>Amount</th>
+          <th className="num">Amount</th>
         </tr>
       </thead>
       <tbody>
-        {transactions.map((t) => (
-          <tr key={t.id}>
-            <td>{t.date}</td>
-            <td>
-              {t.merchant_name ?? t.name ?? "—"}
-              {t.pending && <span className="pending"> pending</span>}
-            </td>
-            <td>{t.category ?? "Uncategorized"}</td>
-            <td style={{ textAlign: "right" }} className={t.amount < 0 ? "credit" : ""}>
-              {t.amount < 0 ? "+" : ""}${Math.abs(t.amount).toFixed(2)}
-            </td>
-          </tr>
-        ))}
+        {transactions.map((t) => {
+          const income = t.amount < 0; // Plaid: negative = money in
+          return (
+            <tr key={t.id}>
+              <td className="muted">{shortDate(t.date)}</td>
+              <td>
+                {t.merchant_name ?? t.name ?? "—"}
+                {t.pending && <span className="pending">pending</span>}
+              </td>
+              <td>
+                <span className="tag">{t.category ?? "Uncategorized"}</span>
+              </td>
+              <td className={`num ${income ? "amt-in" : "amt-out"}`}>
+                {income ? "+" : ""}
+                {currency(Math.abs(t.amount))}
+              </td>
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   );

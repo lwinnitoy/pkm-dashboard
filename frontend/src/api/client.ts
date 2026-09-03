@@ -81,6 +81,32 @@ export interface PortfolioSummary {
   top_holdings: PortfolioHolding[];
 }
 
+export interface Holding {
+  account_id: number;
+  account_name: string | null;
+  ticker: string | null;
+  security_name: string | null;
+  quantity: number | null;
+  price: number | null;
+  value: number | null;
+  cost_basis: number | null;
+  currency: string | null;
+}
+
+export interface InvestmentTransaction {
+  id: number;
+  date: string;
+  name: string | null;
+  ticker: string | null;
+  type: string | null;
+  subtype: string | null;
+  quantity: number | null;
+  price: number | null;
+  amount: number | null;
+  fees: number | null;
+  currency: string | null;
+}
+
 export interface Goal {
   id: number;
   name: string;
@@ -153,6 +179,11 @@ export const api = {
 
   investmentsPortfolio: () =>
     req<PortfolioSummary>("/api/investments/portfolio"),
+
+  holdings: () => req<Holding[]>("/api/investments/holdings"),
+
+  investmentTransactions: (limit = 50) =>
+    req<InvestmentTransaction[]>(`/api/investments/transactions?limit=${limit}`),
 
   goals: () => req<Goal[]>("/api/finance/goals"),
 
