@@ -1,0 +1,14 @@
+# Keep build contexts small and avoid leaking local state into images.
+**/.git
+**/.venv
+**/venv
+**/__pycache__
+**/*.py[cod]
+**/node_modules
+frontend/dist
+frontend/.vite
+**/*.db
+**/*.sqlite3
+**/.env
+.claude
+docs

@@ -1,0 +1,46 @@
+# Local production-like stack: Postgres + backend (migrated on start) + nginx-served
+# frontend. Copy backend/.env.example -> backend/.env and set secrets first.
+# Then: docker compose up --build  ->  app at http://localhost:8080
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: pkm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pkm_dev_password}
+      POSTGRES_DB: pkm
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pkm"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - backend/.env
+    environment:
+      # Override the .env DB with the compose Postgres (psycopg driver).
+      DATABASE_URL: postgresql+psycopg://pkm:${POSTGRES_PASSWORD:-pkm_dev_password}@db:5432/pkm
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "8000"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_BASE: ""
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
