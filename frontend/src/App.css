@@ -109,6 +109,49 @@
 }
 
 /* ============================================================
+   Login
+   ============================================================ */
+.login-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.login-card {
+  width: 100%;
+  max-width: 340px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: stretch;
+  text-align: center;
+}
+.login-card .sidebar-logo {
+  width: 40px;
+  height: 40px;
+  margin: 0 auto 4px;
+}
+.login-card h1 {
+  font-size: 1.3rem;
+}
+.login-card p {
+  margin: 0 0 4px;
+  font-size: 0.9rem;
+}
+.login-card input {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 0.95rem;
+}
+
+/* ============================================================
    Buttons & controls
    ============================================================ */
 .btn {

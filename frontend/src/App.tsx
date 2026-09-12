@@ -1,5 +1,6 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import "./App.css";
+import AuthGate from "./components/AuthGate";
 import AppShell from "./components/layout/AppShell";
 import { FinanceProvider } from "./data/FinanceProvider";
 import Accounts from "./pages/Accounts";
@@ -14,7 +15,8 @@ import Transactions from "./pages/Transactions";
 export default function App() {
   return (
     <BrowserRouter>
-      <FinanceProvider>
+      <AuthGate>
+        <FinanceProvider>
         <Routes>
           <Route element={<AppShell />}>
             <Route index element={<Overview />} />
@@ -27,7 +29,8 @@ export default function App() {
             <Route path="accounts" element={<Accounts />} />
           </Route>
         </Routes>
-      </FinanceProvider>
+        </FinanceProvider>
+      </AuthGate>
     </BrowserRouter>
   );
 }

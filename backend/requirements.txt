@@ -9,6 +9,7 @@ cryptography>=42.0.0
 python-dotenv==1.0.1
 apscheduler==3.11.0
 alembic==1.19.1
+itsdangerous==2.2.0
 
 # --- postgres (cloud DB) ---
 # Only needed when DATABASE_URL points at Postgres (e.g. Neon/Supabase); SQLite

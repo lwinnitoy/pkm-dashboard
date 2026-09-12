@@ -1,14 +1,15 @@
 """FastAPI entrypoint: create tables, seed categories, register routers."""
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.auth import require_auth
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
 from app.models import Category
 from app.plaid_client import DEFAULT_CATEGORIES
-from app.routers import budgets, finance, investments, plaid
+from app.routers import auth, budgets, finance, investments, plaid
 from app.scheduler import shutdown_scheduler, start_scheduler
 
 
@@ -47,10 +48,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(plaid.router)
-app.include_router(finance.router)
-app.include_router(budgets.router)
-app.include_router(investments.router)
+# /api/auth/* and /health stay open; all data routers require a valid token
+# (a no-op when APP_PASSWORD is unset, i.e. local dev).
+app.include_router(auth.router)
+_protected = [Depends(require_auth)]
+app.include_router(plaid.router, dependencies=_protected)
+app.include_router(finance.router, dependencies=_protected)
+app.include_router(budgets.router, dependencies=_protected)
+app.include_router(investments.router, dependencies=_protected)
 
 
 @app.get("/health")

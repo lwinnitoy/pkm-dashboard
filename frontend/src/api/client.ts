@@ -1,6 +1,12 @@
 // Thin typed wrapper around fetch to the FastAPI backend.
 const BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
 
+// --- Auth token storage (single-user bearer token from /api/auth/login) ---
+const TOKEN_KEY = "pkm_token";
+export const getToken = (): string | null => localStorage.getItem(TOKEN_KEY);
+export const setToken = (t: string): void => localStorage.setItem(TOKEN_KEY, t);
+export const clearToken = (): void => localStorage.removeItem(TOKEN_KEY);
+
 export interface Transaction {
   id: number;
   date: string;
@@ -152,10 +158,21 @@ export interface GoalInput {
 }
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getToken();
   const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
     ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...init?.headers,
+    },
   });
+  if (res.status === 401) {
+    // Token missing/expired — drop it and bounce back to the login screen.
+    clearToken();
+    window.location.reload();
+    throw new Error("Unauthorized");
+  }
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     throw new Error(`${res.status} ${res.statusText}: ${detail}`);
@@ -164,6 +181,23 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  authStatus: () => req<{ auth_required: boolean }>("/api/auth/status"),
+
+  // Login handles its own response (a 401 here means "wrong password", not an
+  // expired session), so it bypasses the global 401 → reload behavior above.
+  login: async (password: string): Promise<void> => {
+    const res = await fetch(`${BASE}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    if (!res.ok) {
+      throw new Error(res.status === 401 ? "Incorrect password" : `Login failed (${res.status})`);
+    }
+    const { token } = (await res.json()) as { token: string };
+    setToken(token);
+  },
+
   createLinkToken: () =>
     req<{ link_token: string }>("/api/plaid/create-link-token", { method: "POST" }),
 
