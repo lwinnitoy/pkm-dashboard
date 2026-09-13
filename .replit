@@ -1,0 +1,32 @@
+# Replit config. Deploys as a single process: the frontend is built to static
+# files and served by FastAPI (see app/main.py), which also exposes the API.
+#
+# WEB APP -> Autoscale deployment (deploymentTarget = "cloudrun"). Because Autoscale
+# scales to zero, the in-process scheduler can't be relied on — so DO NOT set
+# SYNC_INTERVAL_HOURS here. Instead run the sync + snapshot job as a separate
+# Replit SCHEDULED DEPLOYMENT (see docs/hosting.md):
+#     build: cd backend && pip install -r requirements.txt
+#     run:   cd backend && python -m app.jobs
+#     schedule: daily (e.g. 0 6 * * *)
+#
+# Required Deployment Secrets (Deployments -> Secrets), NOT committed here — set the
+# same set on BOTH the web app and the scheduled deployment:
+#   SECRET_ENCRYPTION_KEY  APP_PASSWORD  PLAID_CLIENT_ID  PLAID_SECRET  PLAID_ENV=production
+# DATABASE_URL is provided automatically when you add Replit's PostgreSQL.
+
+modules = ["python-3.11", "nodejs-20"]
+
+# Workspace "Run" button: build the UI then serve everything on one port.
+run = "cd frontend && npm install && VITE_API_BASE='' npm run build && cd ../backend && pip install -r requirements.txt && alembic upgrade head && python -m uvicorn app.main:app --host 0.0.0.0 --port 8080"
+
+[env]
+PYTHONUNBUFFERED = "1"
+
+[deployment]
+deploymentTarget = "cloudrun"
+build = ["sh", "-c", "cd frontend && npm ci && VITE_API_BASE='' npm run build && cd ../backend && pip install -r requirements.txt"]
+run = ["sh", "-c", "cd backend && alembic upgrade head && python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
+
+[[ports]]
+localPort = 8080
+externalPort = 80

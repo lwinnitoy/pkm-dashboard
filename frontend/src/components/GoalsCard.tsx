@@ -10,6 +10,9 @@ import {
   YAxis,
 } from "recharts";
 import type { Goal, GoalInput } from "../api/client";
+import { CHART } from "../lib/charts";
+import { currency, currencyCompact, currencyWhole } from "../lib/format";
+import { EmptyState } from "./ui";
 
 /** Compound-growth curve mirroring the backend projection, for display only. */
 function projectionSeries(goal: Goal): { year: number; value: number }[] {
@@ -60,13 +63,15 @@ export default function GoalsCard({
 
   return (
     <section className="card">
-      <div className="summary-head">
+      <div className="card-head">
         <h2>Retirement goals</h2>
-        <button onClick={() => setShowForm((s) => !s)}>{showForm ? "Cancel" : "Add goal"}</button>
+        <button className="btn-ghost btn" onClick={() => setShowForm((s) => !s)}>
+          {showForm ? "Cancel" : "Add goal"}
+        </button>
       </div>
 
       {showForm && (
-        <form className="goal-form" onSubmit={submit}>
+        <form className="form-grid" onSubmit={submit}>
           <label>
             Name
             <input
@@ -112,12 +117,14 @@ export default function GoalsCard({
               }
             />
           </label>
-          <button type="submit">Save goal</button>
+          <button type="submit" className="btn">
+            Save goal
+          </button>
         </form>
       )}
 
       {goals.length === 0 && !showForm && (
-        <p className="muted">No goals yet. Add a retirement target to see your projection.</p>
+        <EmptyState>No goals yet. Add a retirement target to see your projection.</EmptyState>
       )}
 
       {goals.map((g) => {
@@ -128,7 +135,7 @@ export default function GoalsCard({
               <div>
                 <strong>{g.name}</strong>{" "}
                 <span className="muted">
-                  ${g.target_amount.toLocaleString()} by {g.target_date}
+                  {currencyWhole(g.target_amount)} by {g.target_date}
                 </span>
               </div>
               <button className="link-danger" onClick={() => onDelete(g.id)}>
@@ -137,21 +144,17 @@ export default function GoalsCard({
             </div>
 
             {g.current_value == null ? (
-              <p className="muted">
-                Connect an investment account to project this goal.
-              </p>
+              <EmptyState>Connect an investment account to project this goal.</EmptyState>
             ) : (
               <>
                 <div className="goal-stats">
                   <div>
                     <div className="metric-label">Current</div>
-                    <div className="metric-value">${g.current_value.toLocaleString()}</div>
+                    <div className="metric-value sm">{currencyWhole(g.current_value)}</div>
                   </div>
                   <div>
                     <div className="metric-label">Projected at target</div>
-                    <div className="metric-value">
-                      ${g.projected_value?.toLocaleString() ?? "—"}
-                    </div>
+                    <div className="metric-value sm">{currencyWhole(g.projected_value)}</div>
                   </div>
                   <div>
                     <div className="metric-label">Status</div>
@@ -161,31 +164,41 @@ export default function GoalsCard({
                   </div>
                   <div>
                     <div className="metric-label">Need / mo</div>
-                    <div className="metric-value">
-                      ${g.required_monthly_contribution?.toLocaleString() ?? "—"}
+                    <div className="metric-value sm">
+                      {currencyWhole(g.required_monthly_contribution)}
                     </div>
                   </div>
                 </div>
 
                 {series.length > 0 && (
-                  <div style={{ width: "100%", height: 200 }}>
+                  <div className="chart chart-200">
                     <ResponsiveContainer>
-                      <LineChart data={series} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="year" tick={{ fontSize: 11 }} />
-                        <YAxis tick={{ fontSize: 11 }} width={70} />
-                        <Tooltip formatter={(v) => `$${Number(v).toLocaleString()}`} />
+                      <LineChart data={series} margin={{ top: 8, right: 8, bottom: 4, left: 8 }}>
+                        <CartesianGrid stroke={CHART.grid} vertical={false} />
+                        <XAxis
+                          dataKey="year"
+                          tick={{ fontSize: 11 }}
+                          tickLine={false}
+                          axisLine={false}
+                        />
+                        <YAxis
+                          tickFormatter={currencyCompact}
+                          tick={{ fontSize: 11 }}
+                          tickLine={false}
+                          axisLine={false}
+                          width={54}
+                        />
+                        <Tooltip formatter={(v) => currency(Number(v))} />
                         <ReferenceLine
                           y={g.target_amount}
-                          stroke="#dc2626"
+                          stroke={CHART.negative}
                           strokeDasharray="4 4"
                           label={{ value: "Target", fontSize: 11, position: "insideTopRight" }}
                         />
                         <Line
                           type="monotone"
                           dataKey="value"
-                          name="Projected"
-                          stroke="#4f46e5"
+                          stroke={CHART.brand}
                           strokeWidth={2}
                           dot={false}
                         />

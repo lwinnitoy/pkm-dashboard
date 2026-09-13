@@ -11,6 +11,7 @@ from plaid.model.products import Products
 from plaid.model.transactions_sync_request import TransactionsSyncRequest
 from sqlalchemy.orm import Session
 
+from app.categorization import rule_category
 from app.config import get_settings
 from app.database import get_db
 from app.models import Account, PlaidItem, Transaction
@@ -95,16 +96,14 @@ def exchange_token(payload: ExchangeTokenRequest, db: Session = Depends(get_db))
     return {"item_id": item_id, "accounts_linked": len(accounts.accounts)}
 
 
-@router.post("/sync", response_model=SyncResponse)
-def sync_transactions(db: Session = Depends(get_db)):
-    """Incrementally pull transactions for every linked item via /transactions/sync."""
+def sync_all_items(db: Session) -> dict[str, int]:
+    """Incrementally pull transactions for every linked item via /transactions/sync,
+    then snapshot balances. Shared by the manual endpoint and the scheduled job;
+    a no-op (zero totals) when nothing is linked."""
     client = get_plaid_client()
     totals = {"added": 0, "modified": 0, "removed": 0}
 
     items = db.query(PlaidItem).all()
-    if not items:
-        raise HTTPException(status_code=400, detail="No linked institutions. Link one first.")
-
     for item in items:
         cursor = item.transactions_cursor
         has_more = True
@@ -135,11 +134,19 @@ def sync_transactions(db: Session = Depends(get_db)):
         item.transactions_cursor = cursor
         db.commit()
 
-    # Capture today's balances so net-worth history accrues on manual syncs too.
+    # Capture today's balances so net-worth history accrues on every sync.
     write_snapshots(db)
     db.commit()
 
-    return SyncResponse(**totals)
+    return totals
+
+
+@router.post("/sync", response_model=SyncResponse)
+def sync_transactions(db: Session = Depends(get_db)):
+    """Manual sync trigger. Errors if nothing is linked so the UI can prompt to link."""
+    if db.query(PlaidItem).first() is None:
+        raise HTTPException(status_code=400, detail="No linked institutions. Link one first.")
+    return SyncResponse(**sync_all_items(db))
 
 
 def _upsert_transaction(db: Session, txn) -> None:
@@ -149,6 +156,11 @@ def _upsert_transaction(db: Session, txn) -> None:
 
     pfc = getattr(txn, "personal_finance_category", None)
     primary = pfc.primary if pfc else None
+    merchant = getattr(txn, "merchant_name", None)
+
+    # A user's merchant rule wins over Plaid's category so overrides survive sync.
+    override = rule_category(db, merchant, txn.name)
+    category = override or normalize_category(primary)
 
     existing = (
         db.query(Transaction)
@@ -159,10 +171,10 @@ def _upsert_transaction(db: Session, txn) -> None:
         account_id=account.id,
         date=txn.date,
         name=txn.name,
-        merchant_name=getattr(txn, "merchant_name", None),
+        merchant_name=merchant,
         amount=txn.amount,
         currency=txn.iso_currency_code,
-        category=normalize_category(primary),
+        category=category,
         plaid_category=primary,
         pending=bool(txn.pending),
     )

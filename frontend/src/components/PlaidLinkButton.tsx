@@ -39,7 +39,7 @@ export default function PlaidLinkButton({ onLinked }: Props) {
   if (error) return <span className="error">Link error: {error}</span>;
 
   return (
-    <button disabled={!ready || !linkToken} onClick={() => open()}>
+    <button className="btn-ghost btn" disabled={!ready || !linkToken} onClick={() => open()}>
       + Connect a bank
     </button>
   );

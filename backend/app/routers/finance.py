@@ -7,9 +7,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.categorization import match_key, upsert_rule_and_apply
 from app.database import get_db
 from app.investments.portfolio import get_portfolio_value
-from app.models import Account, BalanceSnapshot, Goal, Transaction
+from app.models import Account, BalanceSnapshot, Category, Goal, Transaction
 from app.schemas import (
     AccountOut,
     CategoryComparison,
@@ -21,6 +22,7 @@ from app.schemas import (
     NetWorthPoint,
     SummaryResponse,
     TransactionOut,
+    TransactionUpdate,
     TrendPoint,
 )
 
@@ -44,6 +46,33 @@ def list_transactions(
     if category:
         query = query.filter(Transaction.category == category)
     return query.offset(offset).limit(limit).all()
+
+
+@router.patch("/transactions/{txn_id}", response_model=TransactionOut)
+def recategorize_transaction(
+    txn_id: int, payload: TransactionUpdate, db: Session = Depends(get_db)
+):
+    """Set a transaction's category and persist it as a durable merchant rule that
+    also reassigns other past/future transactions from the same merchant."""
+    txn = db.get(Transaction, txn_id)
+    if txn is None:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    txn.category = payload.category
+    key = match_key(txn.merchant_name, txn.name)
+    if key is not None:
+        upsert_rule_and_apply(db, key, payload.category)
+    db.commit()
+    db.refresh(txn)
+    return txn
+
+
+@router.get("/categories", response_model=list[str])
+def list_categories(db: Session = Depends(get_db)):
+    """Known category names (seed list + any in use) for the recategorize picker."""
+    seeded = {c.name for c in db.query(Category).all()}
+    used = {row[0] for row in db.query(Transaction.category).distinct().all() if row[0]}
+    return sorted(seeded | used)
 
 
 @router.get("/summary", response_model=SummaryResponse)
