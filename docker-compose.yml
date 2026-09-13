@@ -25,6 +25,8 @@ services:
     environment:
       # Override the .env DB with the compose Postgres (psycopg driver).
       DATABASE_URL: postgresql+psycopg://pkm:${POSTGRES_PASSWORD:-pkm_dev_password}@db:5432/pkm
+      # Allow secrets to be injected from the host environment (fall back to .env).
+      APP_PASSWORD: ${APP_PASSWORD:-}
     depends_on:
       db:
         condition: service_healthy
