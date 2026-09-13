@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "sqlite:///./pkm.db"
 
+    # Automatic Plaid sync interval in hours. 0 disables it (default) so local dev
+    # never hits Plaid unprompted; set e.g. 6 in a hosted, always-on deployment.
+    sync_interval_hours: int = 0
+
     # Fernet key for encrypting secrets at rest (Plaid access_tokens).
     secret_encryption_key: str = ""
 
@@ -36,6 +40,16 @@ class Settings(BaseSettings):
 
     # CORS
     frontend_origin: str = "http://localhost:5173"
+
+    @property
+    def sqlalchemy_url(self) -> str:
+        """DATABASE_URL normalized to a driver SQLAlchemy understands. Hosts like
+        Replit/Heroku hand out bare postgres:// URLs; select the psycopg driver."""
+        url = self.database_url
+        for prefix in ("postgresql://", "postgres://"):
+            if url.startswith(prefix):
+                return "postgresql+psycopg://" + url[len(prefix):]
+        return url
 
     @property
     def auth_enabled(self) -> bool:

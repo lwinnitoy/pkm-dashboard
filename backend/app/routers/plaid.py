@@ -96,16 +96,14 @@ def exchange_token(payload: ExchangeTokenRequest, db: Session = Depends(get_db))
     return {"item_id": item_id, "accounts_linked": len(accounts.accounts)}
 
 
-@router.post("/sync", response_model=SyncResponse)
-def sync_transactions(db: Session = Depends(get_db)):
-    """Incrementally pull transactions for every linked item via /transactions/sync."""
+def sync_all_items(db: Session) -> dict[str, int]:
+    """Incrementally pull transactions for every linked item via /transactions/sync,
+    then snapshot balances. Shared by the manual endpoint and the scheduled job;
+    a no-op (zero totals) when nothing is linked."""
     client = get_plaid_client()
     totals = {"added": 0, "modified": 0, "removed": 0}
 
     items = db.query(PlaidItem).all()
-    if not items:
-        raise HTTPException(status_code=400, detail="No linked institutions. Link one first.")
-
     for item in items:
         cursor = item.transactions_cursor
         has_more = True
@@ -136,11 +134,19 @@ def sync_transactions(db: Session = Depends(get_db)):
         item.transactions_cursor = cursor
         db.commit()
 
-    # Capture today's balances so net-worth history accrues on manual syncs too.
+    # Capture today's balances so net-worth history accrues on every sync.
     write_snapshots(db)
     db.commit()
 
-    return SyncResponse(**totals)
+    return totals
+
+
+@router.post("/sync", response_model=SyncResponse)
+def sync_transactions(db: Session = Depends(get_db)):
+    """Manual sync trigger. Errors if nothing is linked so the UI can prompt to link."""
+    if db.query(PlaidItem).first() is None:
+        raise HTTPException(status_code=400, detail="No linked institutions. Link one first.")
+    return SyncResponse(**sync_all_items(db))
 
 
 def _upsert_transaction(db: Session, txn) -> None:
