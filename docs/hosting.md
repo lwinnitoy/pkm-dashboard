@@ -47,29 +47,41 @@ Two common shapes:
 See [database.md](database.md). In short: create the DB, set `DATABASE_URL` with the
 `postgresql+psycopg://` scheme, and the backend applies migrations on boot.
 
-## Replit (single-port, Reserved VM)
+## Replit (single-port)
 
 Replit runs one process on one port, so there the frontend is built to static files
 and **served by FastAPI** (`app/main.py`) rather than nginx — [.replit](../.replit)
-handles the build/run. Deploy as a **Reserved VM** (`deploymentTarget = "gce"`), not
-Autoscale: the sync + snapshot jobs run in-process, so the app must stay always-on
-(Autoscale scales to zero and would suspend them).
+handles the build/run.
 
 1. Import the repo into Replit.
 2. Add **PostgreSQL** (the Database tool) — it sets `DATABASE_URL` automatically; the
    app normalizes the bare `postgres://` URL to the psycopg driver.
-3. Set **Deployment Secrets**: `SECRET_ENCRYPTION_KEY`, `APP_PASSWORD`,
-   `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV=production`, and `SYNC_INTERVAL_HOURS=6`.
-4. Deploy → Reserved VM. Build compiles the UI + installs deps; run migrates then
-   serves the app on port 8080 (mapped to 80).
+3. Set **Deployment Secrets** (on each deployment below): `SECRET_ENCRYPTION_KEY`,
+   `APP_PASSWORD`, `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV=production`.
+4. **Web app → Autoscale** (`deploymentTarget = "cloudrun"`). Build compiles the UI +
+   installs deps; run migrates then serves on `$PORT`.
 
-## Automatic sync
+Autoscale scales to zero, so the **in-process scheduler is not reliable there** — do
+**not** set `SYNC_INTERVAL_HOURS`. Run the jobs separately (next section).
 
-Set `SYNC_INTERVAL_HOURS` > 0 (e.g. `6`) to have APScheduler run a full Plaid sync on
-that cadence; `0` (default) disables it so local dev never hits Plaid unprompted. This
-requires an always-on deployment (Reserved VM / VPS), **not** a scale-to-zero one.
-The eventual upgrade is Plaid `SYNC_UPDATES_AVAILABLE` webhooks once there's a stable
-public URL.
+> Alternative: a **Reserved VM** (`deploymentTarget = "gce"`, always-on, ~$10/mo, paid
+> plan) runs the in-process scheduler directly — set `SYNC_INTERVAL_HOURS=6` and skip
+> the scheduled deployment below.
+
+## Automatic sync + snapshots
+
+`app/jobs.py` is a standalone entrypoint that syncs transactions and snapshots
+balances (same code as the button + daily job; idempotent). Run it on a schedule:
+
+- **Replit Scheduled Deployment** — build `cd backend && pip install -r requirements.txt`,
+  run `cd backend && python -m app.jobs`, schedule daily (e.g. `0 6 * * *`), with the
+  same secrets + `DATABASE_URL`.
+- **Or any external cron** (GitHub Actions, cron-job.org) invoking the same command / a
+  container.
+
+On an always-on host (Reserved VM / VPS) you can instead set `SYNC_INTERVAL_HOURS` > 0
+and let the in-process APScheduler handle it. The eventual upgrade for either path is
+Plaid `SYNC_UPDATES_AVAILABLE` webhooks once there's a stable public URL.
 
 ## Still to wire up (tracked)
 - **Backups:** enable automated backups on the managed Postgres — net-worth
