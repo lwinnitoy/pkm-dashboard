@@ -47,9 +47,31 @@ Two common shapes:
 See [database.md](database.md). In short: create the DB, set `DATABASE_URL` with the
 `postgresql+psycopg://` scheme, and the backend applies migrations on boot.
 
+## Replit (single-port, Reserved VM)
+
+Replit runs one process on one port, so there the frontend is built to static files
+and **served by FastAPI** (`app/main.py`) rather than nginx — [.replit](../.replit)
+handles the build/run. Deploy as a **Reserved VM** (`deploymentTarget = "gce"`), not
+Autoscale: the sync + snapshot jobs run in-process, so the app must stay always-on
+(Autoscale scales to zero and would suspend them).
+
+1. Import the repo into Replit.
+2. Add **PostgreSQL** (the Database tool) — it sets `DATABASE_URL` automatically; the
+   app normalizes the bare `postgres://` URL to the psycopg driver.
+3. Set **Deployment Secrets**: `SECRET_ENCRYPTION_KEY`, `APP_PASSWORD`,
+   `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV=production`, and `SYNC_INTERVAL_HOURS=6`.
+4. Deploy → Reserved VM. Build compiles the UI + installs deps; run migrates then
+   serves the app on port 8080 (mapped to 80).
+
+## Automatic sync
+
+Set `SYNC_INTERVAL_HOURS` > 0 (e.g. `6`) to have APScheduler run a full Plaid sync on
+that cadence; `0` (default) disables it so local dev never hits Plaid unprompted. This
+requires an always-on deployment (Reserved VM / VPS), **not** a scale-to-zero one.
+The eventual upgrade is Plaid `SYNC_UPDATES_AVAILABLE` webhooks once there's a stable
+public URL.
+
 ## Still to wire up (tracked)
-- **Automatic sync:** currently manual (button) + a daily balance snapshot. Add a
-  scheduled `sync_transactions` job (APScheduler) and, once there's a public URL,
-  move to Plaid `SYNC_UPDATES_AVAILABLE` webhooks.
 - **Backups:** enable automated backups on the managed Postgres — net-worth
   snapshot history cannot be re-fetched from Plaid.
+- **Plaid webhooks:** replace interval polling with event-driven sync.
