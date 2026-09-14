@@ -194,7 +194,7 @@ def top_merchants(
 
 @router.get("/category-comparison", response_model=list[CategoryComparison])
 def category_comparison(
-    days: int = Query(30, ge=1, le=180, description="Length of each comparison window"),
+    days: int = Query(30, ge=1, le=365, description="Length of each comparison window"),
     db: Session = Depends(get_db),
 ):
     """Per-category spend for the current window vs. the immediately prior one."""

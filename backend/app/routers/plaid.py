@@ -38,6 +38,10 @@ def create_link_token():
     consented = settings.additional_consented_product_list
     if consented:
         request.additional_consented_products = [Products(p) for p in consented]
+    # Required for OAuth institutions (e.g. RBC). Must exactly match a redirect URI
+    # registered in the Plaid dashboard.
+    if settings.plaid_redirect_uri:
+        request.redirect_uri = settings.plaid_redirect_uri
     try:
         response = client.link_token_create(request)
     except Exception as exc:  # surface Plaid errors to the client for debugging

@@ -212,6 +212,11 @@ export const api = {
       method: "POST",
     }),
 
+  investmentsSync: () =>
+    req<{ items_synced: number; items_skipped: number }>("/api/investments/sync", {
+      method: "POST",
+    }),
+
   transactions: (limit = 50) =>
     req<Transaction[]>(`/api/finance/transactions?limit=${limit}`),
 
