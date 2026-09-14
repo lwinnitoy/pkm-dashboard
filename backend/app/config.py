@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     # like Wealthsimple to link and consent to investments data.
     plaid_additional_consented_products: str = "investments"
 
+    # OAuth redirect URI, required to link OAuth institutions (many CA/US banks,
+    # e.g. RBC). Must be an exact-match https URL registered in the Plaid dashboard
+    # (Team Settings -> API -> Allowed redirect URIs), e.g. https://your-app/. Leave
+    # blank to disable OAuth (non-OAuth institutions still link).
+    plaid_redirect_uri: str = ""
+
     # Database
     database_url: str = "sqlite:///./pkm.db"
 

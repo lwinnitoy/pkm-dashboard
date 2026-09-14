@@ -84,6 +84,9 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     setMessage(null);
     try {
       const r = await api.sync();
+      // Investments live on a separate Plaid product; sync them too (best-effort,
+      // so accounts without investments don't surface an error).
+      await api.investmentsSync().catch(() => undefined);
       setMessage(`Synced: +${r.added} new, ${r.modified} updated, ${r.removed} removed.`);
       await refresh();
     } catch (e) {

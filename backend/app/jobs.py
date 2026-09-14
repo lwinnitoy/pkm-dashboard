@@ -13,6 +13,7 @@ import logging
 
 from app.database import SessionLocal
 from app.models import PlaidItem
+from app.routers.investments import sync_all_investments
 from app.routers.plaid import sync_all_items
 from app.snapshots import run_daily_snapshot
 
@@ -27,6 +28,8 @@ def run() -> None:
             return
         totals = sync_all_items(db)
         logger.info("transaction sync complete: %s", totals)
+        inv = sync_all_investments(db)
+        logger.info("investments sync complete: %s", inv)
 
     # Own session inside: pull fresh balances from Plaid, then snapshot the day.
     run_daily_snapshot()

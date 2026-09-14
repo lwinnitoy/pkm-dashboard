@@ -167,8 +167,10 @@ def sync_investments_for_item(db: Session, client, item: PlaidItem) -> dict[str,
     return counts
 
 
-@router.post("/sync", response_model=InvestmentsSyncResponse)
-def sync_investments(db: Session = Depends(get_db)):
+def sync_all_investments(db: Session) -> dict[str, int]:
+    """Sync holdings + investment transactions for every item, best-effort (items
+    without investment accounts are skipped, not errored). Shared by the endpoint,
+    the manual sync flow, and the scheduled job."""
     client = get_plaid_client()
     totals = {"securities": 0, "holdings": 0, "investment_transactions": 0}
     synced = skipped = 0
@@ -185,13 +187,12 @@ def sync_investments(db: Session = Depends(get_db)):
             db.rollback()
             skipped += 1
 
-    return InvestmentsSyncResponse(
-        securities=totals["securities"],
-        holdings=totals["holdings"],
-        investment_transactions=totals["investment_transactions"],
-        items_synced=synced,
-        items_skipped=skipped,
-    )
+    return {**totals, "items_synced": synced, "items_skipped": skipped}
+
+
+@router.post("/sync", response_model=InvestmentsSyncResponse)
+def sync_investments(db: Session = Depends(get_db)):
+    return InvestmentsSyncResponse(**sync_all_investments(db))
 
 
 @router.get("/holdings", response_model=list[HoldingOut])
