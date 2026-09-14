@@ -22,24 +22,17 @@ the same foundation.
 
 ### Backend
 
-> ⚠️ **This project lives in iCloud Drive. Do NOT put the virtualenv inside the
-> project folder.** iCloud syncing the venv's thousands of dependency files makes
-> imports hang indefinitely. Keep the venv on local disk (e.g. `~/.venvs/...`).
-> Your app source can stay in iCloud — it's small and imports fine.
-
 ```bash
-# Create the venv OUTSIDE iCloud (local disk):
-python3 -m venv ~/.venvs/pkm-platform
-~/.venvs/pkm-platform/bin/pip install -r backend/requirements.txt
+python3 -m venv .venv
+.venv/bin/pip install -r backend/requirements.txt
 
 cd backend
-cp .env.example .env                              # paste your PLAID_CLIENT_ID / PLAID_SECRET
-~/.venvs/pkm-platform/bin/uvicorn app.main:app    # http://localhost:8000  (docs at /docs)
+cp .env.example .env                     # paste your PLAID_CLIENT_ID / PLAID_SECRET
+../.venv/bin/uvicorn app.main:app        # http://localhost:8000  (docs at /docs)
 ```
 
-Tip: `source ~/.venvs/pkm-platform/bin/activate` first, then you can just run
-`uvicorn app.main:app`. The SQLite DB (`pkm.db`) and category seed data are created
-automatically on first boot.
+Tip: `source .venv/bin/activate` first, then you can just run `uvicorn app.main:app`.
+The SQLite DB (`pkm.db`) and category seed data are created automatically on first boot.
 
 ### Frontend
 

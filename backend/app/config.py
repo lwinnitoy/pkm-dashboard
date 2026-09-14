@@ -23,11 +23,41 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "sqlite:///./pkm.db"
 
+    # Automatic Plaid sync interval in hours. 0 disables it (default) so local dev
+    # never hits Plaid unprompted; set e.g. 6 in a hosted, always-on deployment.
+    sync_interval_hours: int = 0
+
     # Fernet key for encrypting secrets at rest (Plaid access_tokens).
     secret_encryption_key: str = ""
 
+    # Single-user auth. When app_password is empty, auth is DISABLED (local dev
+    # convenience); set it in any hosted/exposed environment to require login.
+    # Login returns a signed, timestamped bearer token (signed with auth_secret,
+    # defaulting to secret_encryption_key) valid for auth_token_ttl_hours.
+    app_password: str = ""
+    auth_secret: str = ""
+    auth_token_ttl_hours: int = 720  # 30 days
+
     # CORS
     frontend_origin: str = "http://localhost:5173"
+
+    @property
+    def sqlalchemy_url(self) -> str:
+        """DATABASE_URL normalized to a driver SQLAlchemy understands. Hosts like
+        Replit/Heroku hand out bare postgres:// URLs; select the psycopg driver."""
+        url = self.database_url
+        for prefix in ("postgresql://", "postgres://"):
+            if url.startswith(prefix):
+                return "postgresql+psycopg://" + url[len(prefix):]
+        return url
+
+    @property
+    def auth_enabled(self) -> bool:
+        return bool(self.app_password)
+
+    @property
+    def signing_secret(self) -> str:
+        return self.auth_secret or self.secret_encryption_key
 
     @property
     def country_code_list(self) -> list[str]:

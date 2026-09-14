@@ -1,6 +1,6 @@
 import {
-  Area,
-  AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
   Legend,
   ResponsiveContainer,
@@ -9,40 +9,48 @@ import {
   YAxis,
 } from "recharts";
 import type { TrendPoint } from "../api/client";
+import { CHART } from "../lib/charts";
+import { currency, currencyCompact, shortDate } from "../lib/format";
+import { EmptyState } from "./ui";
 
 export default function SpendingTrendChart({ data }: { data: TrendPoint[] }) {
+  if (data.length === 0) {
+    return <EmptyState>No history yet. Sync some transactions to see the trend.</EmptyState>;
+  }
   return (
-    <section className="card">
-      <h2>Spending vs. income</h2>
-      {data.length === 0 ? (
-        <p className="muted">No history yet. Sync some transactions to see the trend.</p>
-      ) : (
-        <div style={{ width: "100%", height: 260 }}>
-          <ResponsiveContainer>
-            <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="period_start" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} />
-              <Tooltip formatter={(v) => `$${Number(v).toFixed(2)}`} />
-              <Legend />
-              <Area
-                type="monotone"
-                dataKey="income"
-                name="Income"
-                stroke="#059669"
-                fill="#05966933"
-              />
-              <Area
-                type="monotone"
-                dataKey="spent"
-                name="Spent"
-                stroke="#dc2626"
-                fill="#dc262633"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-    </section>
+    <div className="chart chart-260">
+      <ResponsiveContainer>
+        <BarChart data={data} margin={{ top: 8, right: 8, bottom: 4, left: 8 }} barGap={2}>
+          <CartesianGrid stroke={CHART.grid} vertical={false} />
+          <XAxis
+            dataKey="period_start"
+            tickFormatter={shortDate}
+            tick={{ fontSize: 11 }}
+            tickLine={false}
+            axisLine={false}
+            minTickGap={20}
+          />
+          <YAxis
+            tickFormatter={currencyCompact}
+            tick={{ fontSize: 11 }}
+            tickLine={false}
+            axisLine={false}
+            width={54}
+          />
+          <Tooltip
+            formatter={(v, name) => [currency(Number(v)), name === "income" ? "Income" : "Spent"]}
+            labelFormatter={(l) => shortDate(String(l))}
+            cursor={{ fill: "rgba(0,0,0,0.03)" }}
+          />
+          <Legend
+            formatter={(v) => (v === "income" ? "Income" : "Spent")}
+            iconType="circle"
+            wrapperStyle={{ fontSize: 12 }}
+          />
+          <Bar dataKey="income" fill={CHART.positive} radius={[3, 3, 0, 0]} />
+          <Bar dataKey="spent" fill={CHART.negative} radius={[3, 3, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
   );
 }

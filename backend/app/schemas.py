@@ -44,10 +44,51 @@ class TransactionOut(BaseModel):
     pending: bool
 
 
+class TransactionUpdate(BaseModel):
+    category: str
+
+
 class CategorySpend(BaseModel):
     category: str
     total: float
     count: int
+
+
+# ---- Budgets ----
+
+
+class BudgetCreate(BaseModel):
+    category: str
+    monthly_limit: float
+
+
+class BudgetUpdate(BaseModel):
+    category: str | None = None
+    monthly_limit: float | None = None
+
+
+class BudgetOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    category: str
+    monthly_limit: float
+
+
+class BudgetStatusItem(BaseModel):
+    budget_id: int | None  # None = spending in a category with no budget set
+    category: str
+    limit: float | None
+    spent: float
+    remaining: float | None
+    pct: float | None
+
+
+class BudgetStatus(BaseModel):
+    month: str  # "YYYY-MM"
+    total_limit: float
+    total_spent: float
+    items: list[BudgetStatusItem]
 
 
 class SummaryResponse(BaseModel):

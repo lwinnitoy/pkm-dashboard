@@ -91,6 +91,30 @@ class Category(Base):
     name: Mapped[str] = mapped_column(String, unique=True)
 
 
+class CategoryRule(Base):
+    """User recategorization as a durable merchant rule. Keyed by a normalized
+    match key (lowercased merchant_name, falling back to name) so it survives
+    Plaid syncs and auto-applies to past and future transactions."""
+
+    __tablename__ = "category_rules"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    match_key: Mapped[str] = mapped_column(String, unique=True, index=True)
+    category: Mapped[str] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+class Budget(Base):
+    """A monthly spending limit for one category (resets each calendar month)."""
+
+    __tablename__ = "budgets"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    category: Mapped[str] = mapped_column(String, unique=True)
+    monthly_limit: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
 # ---- Investments (holdings + investment transactions, e.g. Wealthsimple) ----
 
 
