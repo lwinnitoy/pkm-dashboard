@@ -35,7 +35,13 @@ export default function PlaidLinkButton({ onLinked }: Props) {
     async (public_token, metadata) => {
       if (!public_token) return;
       try {
-        await api.exchangeToken(public_token, metadata.institution?.name ?? undefined);
+        // institution_id lets the backend recognize a reconnect of a bank you
+        // already linked, instead of duplicating all of its accounts.
+        await api.exchangeToken(
+          public_token,
+          metadata.institution?.name ?? undefined,
+          metadata.institution?.institution_id ?? undefined,
+        );
         localStorage.removeItem(TOKEN_KEY);
         if (isOAuthReturn) {
           // Drop ?oauth_state_id so a refresh doesn't re-trigger Link.

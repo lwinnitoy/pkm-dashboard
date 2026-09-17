@@ -39,6 +39,9 @@ export interface Account {
   subtype: string | null;
   current_balance: number | null;
   currency: string | null;
+  source: string;
+  mask: string | null;
+  institution_name: string | null;
 }
 
 export interface TrendPoint {
@@ -286,10 +289,14 @@ export const api = {
   createLinkToken: () =>
     req<{ link_token: string }>("/api/plaid/create-link-token", { method: "POST" }),
 
-  exchangeToken: (public_token: string, institution_name?: string) =>
+  exchangeToken: (
+    public_token: string,
+    institution_name?: string,
+    institution_id?: string,
+  ) =>
     req<{ item_id: string; accounts_linked: number }>("/api/plaid/exchange-token", {
       method: "POST",
-      body: JSON.stringify({ public_token, institution_name }),
+      body: JSON.stringify({ public_token, institution_name, institution_id }),
     }),
 
   sync: () =>
@@ -331,6 +338,9 @@ export const api = {
   summary: (period = 30) => req<Summary>(`/api/finance/summary?period=${period}`),
 
   accounts: () => req<Account[]>("/api/finance/accounts"),
+
+  deleteAccount: (id: number) =>
+    req<void>(`/api/finance/accounts/${id}`, { method: "DELETE" }),
 
   spendingTrend: (period = 180, granularity: "day" | "week" | "month" = "month") =>
     req<TrendPoint[]>(

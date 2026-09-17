@@ -62,42 +62,91 @@ def exchange_token(payload: ExchangeTokenRequest, db: Session = Depends(get_db))
     access_token = exchange.access_token
     item_id = exchange.item_id
 
-    item = db.query(PlaidItem).filter_by(item_id=item_id).first()
+    item = _item_for_relink(db, item_id, payload.institution_id)
     if item is None:
         item = PlaidItem(
             item_id=item_id,
             access_token=access_token,
+            institution_id=payload.institution_id,
             institution_name=payload.institution_name,
         )
         db.add(item)
         db.flush()  # assign item.id before creating accounts
     else:
+        # Re-link of a bank we already have: adopt the new credentials onto the
+        # existing row rather than letting a second copy of every account appear.
+        item.item_id = item_id
         item.access_token = access_token
+        item.institution_id = payload.institution_id or item.institution_id
+        item.institution_name = payload.institution_name or item.institution_name
+        item.transactions_cursor = None  # ids changed; re-walk from the start
 
-    # Pull accounts for this item and upsert them.
     accounts = client.accounts_get(AccountsGetRequest(access_token=access_token))
     for acct in accounts.accounts:
-        existing = db.query(Account).filter_by(plaid_account_id=acct.account_id).first()
-        balance = acct.balances.current if acct.balances else None
-        currency = acct.balances.iso_currency_code if acct.balances else None
-        if existing is None:
-            db.add(
-                Account(
-                    plaid_item_id=item.id,
-                    plaid_account_id=acct.account_id,
-                    name=acct.name,
-                    official_name=acct.official_name,
-                    type=str(acct.type) if acct.type else None,
-                    subtype=str(acct.subtype) if acct.subtype else None,
-                    current_balance=balance,
-                    currency=currency,
-                )
-            )
-        else:
-            existing.current_balance = balance
+        _upsert_account(db, item, acct)
 
     db.commit()
     return {"item_id": item_id, "accounts_linked": len(accounts.accounts)}
+
+
+def _item_for_relink(db: Session, item_id: str, institution_id: str | None) -> PlaidItem | None:
+    """The existing row this link should update, if any.
+
+    Plaid mints a fresh `item_id` (and fresh `account_id`s) every time you go
+    through Link, so matching on `item_id` alone never recognizes a re-link and
+    every reconnect silently duplicates the institution's accounts. The
+    institution is the stable identity.
+    """
+    existing = db.query(PlaidItem).filter_by(item_id=item_id).first()
+    if existing is not None:
+        return existing
+    if institution_id:
+        return db.query(PlaidItem).filter_by(institution_id=institution_id).first()
+    return None
+
+
+def _upsert_account(db: Session, item: PlaidItem, acct) -> None:
+    """Attach one Plaid account to `item`, reusing the existing row where possible.
+
+    Matched by `plaid_account_id` first, then by mask + name among this item's
+    accounts — the fallback that carries transaction history across a re-link,
+    since the Plaid id will have changed. Deliberately requires a mask match: a
+    wrong guess would graft one account's history onto another.
+    """
+    balance = acct.balances.current if acct.balances else None
+    currency = acct.balances.iso_currency_code if acct.balances else None
+    mask = getattr(acct, "mask", None)
+
+    existing = db.query(Account).filter_by(plaid_account_id=acct.account_id).first()
+    if existing is None and mask:
+        existing = (
+            db.query(Account)
+            .filter_by(plaid_item_id=item.id, mask=mask, name=acct.name)
+            .first()
+        )
+        if existing is not None:
+            existing.plaid_account_id = acct.account_id  # rebind to the new id
+
+    if existing is None:
+        db.add(
+            Account(
+                plaid_item_id=item.id,
+                plaid_account_id=acct.account_id,
+                name=acct.name,
+                mask=mask,
+                official_name=acct.official_name,
+                type=str(acct.type) if acct.type else None,
+                subtype=str(acct.subtype) if acct.subtype else None,
+                current_balance=balance,
+                currency=currency,
+            )
+        )
+        return
+
+    existing.plaid_item_id = item.id
+    existing.mask = mask or existing.mask
+    existing.current_balance = balance
+    existing.currency = currency or existing.currency
 
 
 def sync_all_items(db: Session) -> dict[str, int]:
