@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.categorization import match_key, upsert_rule_and_apply
@@ -33,6 +33,14 @@ LIABILITY_TYPES = {"credit", "loan"}
 
 # Categories excluded from "spending" totals everywhere.
 NON_SPEND_CATEGORIES = ["Income", "Transfers"]
+
+# NULL-safe "is this row spending?". A bare `category NOT IN (...)` evaluates to
+# UNKNOWN when category IS NULL, which silently drops uncategorized rows from
+# every total — they vanish rather than landing in "Uncategorized".
+IS_SPEND_CATEGORY = or_(
+    Transaction.category.is_(None),
+    Transaction.category.notin_(NON_SPEND_CATEGORIES),
+)
 
 
 @router.get("/transactions", response_model=list[TransactionOut])
@@ -87,7 +95,7 @@ def spending_summary(
     spend_filter = (
         Transaction.date >= since,
         Transaction.amount > 0,
-        Transaction.category.notin_(["Income", "Transfers"]),
+        IS_SPEND_CATEGORY,
     )
 
     total = db.query(func.coalesce(func.sum(Transaction.amount), 0.0)).filter(*spend_filter).scalar()
@@ -148,11 +156,16 @@ def spending_trend(
     spent: dict[date, float] = defaultdict(float)
     income: dict[date, float] = defaultdict(float)
     for txn_date, amount, category in txns:
+        if category == "Transfers":
+            # Money moving between your own accounts is neither. Counting it would
+            # double-book every credit-card payment: once as income on the card,
+            # once as spending from the chequing account that paid it.
+            continue
         bucket = _bucket_start(txn_date, granularity)
         if category == "Income" or amount < 0:
             # Income category, or a credit (negative = money in) in any bucket.
             income[bucket] += -amount if amount < 0 else amount
-        elif category not in NON_SPEND_CATEGORIES:
+        else:
             spent[bucket] += amount
 
     buckets = sorted(set(spent) | set(income))
@@ -180,7 +193,7 @@ def top_merchants(
         .filter(
             Transaction.date >= since,
             Transaction.amount > 0,
-            Transaction.category.notin_(NON_SPEND_CATEGORIES),
+            IS_SPEND_CATEGORY,
         )
         .group_by(label)
         .order_by(func.sum(Transaction.amount).desc())
@@ -209,7 +222,7 @@ def category_comparison(
                 Transaction.date >= start,
                 Transaction.date < end,
                 Transaction.amount > 0,
-                Transaction.category.notin_(NON_SPEND_CATEGORIES),
+                IS_SPEND_CATEGORY,
             )
             .group_by(Transaction.category)
             .all()

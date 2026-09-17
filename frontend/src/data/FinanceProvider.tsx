@@ -84,10 +84,17 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     setMessage(null);
     try {
       const r = await api.sync();
-      // Investments live on a separate Plaid product; sync them too (best-effort,
-      // so accounts without investments don't surface an error).
-      await api.investmentsSync().catch(() => undefined);
-      setMessage(`Synced: +${r.added} new, ${r.modified} updated, ${r.removed} removed.`);
+      // Investments live on a separate Plaid product, so a failure there must not
+      // fail the transaction sync — but it does get reported, otherwise an item
+      // that never consented to investments looks identical to one with no holdings.
+      const inv = await api.investmentsSync().catch(() => null);
+      const skipped = (inv?.skipped_details ?? [])
+        .map((s) => `${s.institution}: ${s.error_code}`)
+        .join("; ");
+      setMessage(
+        `Synced: +${r.added} new, ${r.modified} updated, ${r.removed} removed.` +
+          (skipped ? ` Investments skipped — ${skipped}.` : ""),
+      );
       await refresh();
     } catch (e) {
       setMessage(String(e));

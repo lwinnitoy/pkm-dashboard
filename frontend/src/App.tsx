@@ -7,6 +7,7 @@ import Accounts from "./pages/Accounts";
 import Budgets from "./pages/Budgets";
 import CashFlow from "./pages/CashFlow";
 import Goals from "./pages/Goals";
+import Import from "./pages/Import";
 import Investments from "./pages/Investments";
 import NetWorth from "./pages/NetWorth";
 import Overview from "./pages/Overview";
@@ -27,6 +28,7 @@ export default function App() {
             <Route path="net-worth" element={<NetWorth />} />
             <Route path="goals" element={<Goals />} />
             <Route path="accounts" element={<Accounts />} />
+            <Route path="import" element={<Import />} />
           </Route>
         </Routes>
         </FinanceProvider>

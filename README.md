@@ -78,13 +78,28 @@ investment transactions (buys/sells/dividends) sync through the **investments mo
 - `GET /api/investments/transactions` — paginated investment transactions.
 - `GET /api/investments/portfolio` — total value, value by account, top holdings.
 
+## Importing statements for banks Plaid can't link
+
+Not every institution is linkable — RBC's in-app push MFA is incompatible with Plaid's
+refresh model, so it fails with "your account settings are incompatible" no matter how
+the app is configured. For those, the **Import** page takes a CSV/Excel statement export
+and loads it into the same transactions the dashboard already uses.
+
+Uploading previews first: it reports how many rows are new, how many are duplicates from
+an overlapping statement period, and how many conflict with a stored amount — plus any
+gap in your history the file would leave behind. Nothing is written until you confirm.
+
+See [docs/statement-imports.md](docs/statement-imports.md) for how deduplication works
+and how to add a preset for another bank.
+
 ## Project layout
 
 - `backend/app/models.py` — `plaid_items`, `accounts`, `transactions`, `categories`
 - `backend/app/routers/plaid.py` — link / exchange / sync
 - `backend/app/routers/finance.py` — spending dashboard read endpoints
 - `backend/app/routers/investments.py` — investments sync + holdings/portfolio endpoints
-- `frontend/src/` — `api/` client, `components/`, `pages/Dashboard.tsx`
+- `backend/app/imports/` + `routers/imports.py` — CSV/Excel statement import
+- `frontend/src/` — `api/` client, `components/`, `pages/`
 
 ## Roadmap / hardening TODOs
 
@@ -93,4 +108,5 @@ investment transactions (buys/sells/dividends) sync through the **investments mo
 - Scheduled background sync (APScheduler) — currently manual via "Sync now".
 - Docker Compose + hosting.
 - Future modules: tasks, subscriptions engine, calendar sync.
+- Planned directions (email recap, Databricks analytics layer) — [docs/roadmap.md](docs/roadmap.md).
 ```

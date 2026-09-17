@@ -25,8 +25,17 @@ cd backend && cp .env.example .env      # set PLAID_CLIENT_ID / PLAID_SECRET / S
 `SECRET_ENCRYPTION_KEY` is required (Fernet). Generate one with:
 `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
 On first boot the SQLite DB (`backend/pkm.db`), tables, and category seed data are created
-automatically — there are **no migrations** (schema changes = delete `pkm.db` in dev, or
-add a migration tool before touching production data).
+automatically.
+
+Schema changes are **migration-managed with Alembic** (`backend/alembic/versions/`).
+SQLite dev bootstraps via `create_all` on boot, but Postgres runs `alembic upgrade head`
+on deploy — so any model change needs a migration or cloud will drift. Use
+`op.batch_alter_table` when altering an existing column: SQLite can't `ALTER` in place.
+Verify with `alembic upgrade head && alembic check` (the latter reports model/migration drift).
+
+```bash
+cd backend && ../.venv/bin/pytest          # 58 tests, no external services needed
+```
 
 ### Frontend
 ```bash
@@ -38,7 +47,9 @@ npm run build             # tsc -b && vite build
 npm run lint              # oxlint
 ```
 
-There is currently **no automated test suite** (backend or frontend).
+The backend has a pytest suite (`backend/tests/`) using an in-memory SQLite DB per test
+and seeding helpers in `tests/factories.py`; no Plaid credentials or network needed.
+The **frontend has no tests** — `npm run build` (tsc) and `npm run lint` are the checks.
 
 ## Architecture
 
@@ -62,6 +73,42 @@ Link is initialized with `transactions` as the primary product and `investments`
 investment consent when the institution supports it **without filtering the institution
 list**. Wealthsimple requires `PLAID_ENV=production` and `CA` in `PLAID_COUNTRY_CODES`
 (it is not in Sandbox).
+
+**Known blocker: RBC.** OAuth is wired up correctly (`PLAID_REDIRECT_URI` set, matches
+the Plaid dashboard, `PLAID_ENV=production`, `CA` in `PLAID_COUNTRY_CODES`) but linking
+still fails with Plaid's "Your account settings are incompatible" error. This is a
+Plaid-side limitation, not an app config issue: RBC's in-app push MFA challenges on every
+login instead of remembering a trusted device, and Plaid can't complete an async
+refresh-capable Item against that pattern (confirmed via Plaid's own support docs — no
+committed fix timeline as of 2026-09). Possible ways around it, none yet tried
+successfully: enable "remember this device" in RBC's own sign-in security settings if
+available, or see if RBC's login offers a non-push second factor (SMS/security questions)
+during the OAuth handoff. Don't spend time re-checking the OAuth/env wiring for this
+institution until Plaid or RBC changes something.
+
+### Manual statement imports (the non-Plaid path)
+Because RBC can't be linked (above), `app/imports/` loads bank CSV/Excel exports into the
+same `Transaction` rows a sync would produce — so categories, rules, budgets and charts
+never learn there are two sources. `Account`/`Transaction` carry `source` (`plaid` | `csv`),
+and the Plaid id columns are nullable because a manual account has no Plaid identity.
+
+Two traps this path exposed, both worth knowing before touching spending queries:
+**(1)** `category NOT IN (...)` is UNKNOWN for `NULL`, so uncategorized rows get dropped
+from totals instead of counted — use the NULL-safe `IS_SPEND_CATEGORY` helper in
+`routers/finance.py`. **(2)** Importing a card *and* the account that pays it double-books
+every payment, so transfer-looking descriptions are auto-categorized `Transfers` and
+excluded from spend *and* income (`app/imports/categorize.py`). Account `type` also
+matters: `LIABILITY_TYPES` decides asset vs. debt, so a credit card must not be created
+as `depository`.
+
+Re-imports are reconciled, not blindly appended: each row gets a deterministic
+`import_fingerprint` (a UNIQUE column) over account/date/amount/description **plus an
+ordinal within that group**, so overlapping statement periods dedupe while two genuinely
+identical same-day purchases both survive. Coverage is tracked as statement *periods*
+(`ImportBatch`), which is what makes gap detection ("you have June and August, not July")
+possible. Adding a bank = adding a `ColumnMap` preset, not a parser.
+See [docs/statement-imports.md](docs/statement-imports.md) — read it before touching
+fingerprinting, since the ordinal scheme is load-bearing and easy to "simplify" wrongly.
 
 ### The investments seam (important boundary)
 `backend/app/investments/portfolio.py::get_portfolio_value(db) -> float | None` is the
@@ -95,6 +142,14 @@ via the investments seam, never stored). Transaction `amount` follows Plaid's co
   `lru_cache`d). Comma-separated env vars are exposed as `*_list` properties.
 
 ### Frontend
-Single `pages/Dashboard.tsx` composed of chart/table components in `components/`. All
-backend access goes through the typed `api` object in `src/api/client.ts` (thin `fetch`
-wrapper) — add new endpoints there rather than calling `fetch` in components.
+Pages under `src/pages/` (one per nav entry, routed in `App.tsx` and listed in
+`components/layout/nav.ts`) composed of chart/table components in `components/`. Shared
+data comes from `FinanceProvider`/`useFinance`. All backend access goes through the typed
+`api` object in `src/api/client.ts` (thin `fetch` wrapper) — add new endpoints there
+rather than calling `fetch` in components. Note `req()` forces a JSON content-type; file
+uploads use the separate `upload()` helper so the browser can set the multipart boundary.
+
+## Direction
+[docs/roadmap.md](docs/roadmap.md) records planned work that isn't started — an email
+recap module and an eventual Databricks migration for the analytics layer. Consult it
+before making data-layer decisions that would be awkward to unwind.

@@ -101,12 +101,19 @@ class SummaryResponse(BaseModel):
 # ---- Investments ----
 
 
+class SkippedItem(BaseModel):
+    institution: str
+    error_code: str  # Plaid's code, e.g. PRODUCTS_NOT_SUPPORTED / ITEM_LOGIN_REQUIRED
+    message: str
+
+
 class InvestmentsSyncResponse(BaseModel):
     securities: int
     holdings: int
     investment_transactions: int
     items_synced: int
     items_skipped: int
+    skipped_details: list[SkippedItem] = []
 
 
 class HoldingOut(BaseModel):
@@ -178,6 +185,97 @@ class NetWorthPoint(BaseModel):
     assets: float
     liabilities: float
     net_worth: float
+
+
+# ---- Manual statement imports (CSV/Excel) ----
+
+
+class ImportPresetOut(BaseModel):
+    key: str
+    label: str
+
+
+class DateRangeOut(BaseModel):
+    start: date
+    end: date
+
+
+class ImportRowOut(BaseModel):
+    date: date
+    description: str
+    amount: float
+    currency: str | None
+    status: str  # new | duplicate | conflict
+    existing_amount: float | None = None  # stored value when status == conflict
+    category: str  # what it would be written with, incl. auto-detected Transfers
+
+
+class ImportPreviewOut(BaseModel):
+    account_id: int
+    filename: str
+    preset: str
+    period: DateRangeOut
+    parsed: int
+    new: int
+    duplicate: int
+    conflict: int
+    transfers: int  # rows auto-categorized as Transfers, excluded from spend/income
+    gaps_before: list[DateRangeOut]  # uncovered spans as things stand
+    gaps_after: list[DateRangeOut]   # what would still be uncovered post-import
+    conflicts: list[ImportRowOut]    # every conflict, so none are decided blind
+    sample: list[ImportRowOut]       # first rows, to eyeball the parse
+
+
+class ImportCommitOut(BaseModel):
+    batch_id: int
+    imported: int
+    duplicate: int
+    conflict: int
+    period: DateRangeOut
+    gaps: list[DateRangeOut]
+
+
+class ManualAccountCreate(BaseModel):
+    name: str
+    # Drives asset/liability classification in net worth (LIABILITY_TYPES), so a
+    # credit card imported as "depository" would add to net worth instead of
+    # subtracting from it.
+    type: str = "depository"
+    subtype: str | None = None
+    currency: str | None = "CAD"
+    current_balance: float | None = None
+
+
+class ManualAccountUpdate(BaseModel):
+    name: str | None = None
+    type: str | None = None
+    subtype: str | None = None
+    current_balance: float | None = None
+
+
+class ImportBatchOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    account_id: int
+    filename: str
+    preset: str
+    period_start: date
+    period_end: date
+    rows_parsed: int
+    rows_imported: int
+    rows_duplicate: int
+    rows_conflicting: int
+
+
+class AccountCoverageOut(BaseModel):
+    account_id: int
+    account_name: str | None
+    account_type: str | None
+    source: str
+    covered: list[DateRangeOut]
+    gaps: list[DateRangeOut]
+    last_imported_period_end: date | None
 
 
 class GoalCreate(BaseModel):
