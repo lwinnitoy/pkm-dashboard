@@ -149,6 +149,74 @@ export interface Goal {
   required_monthly_contribution: number | null;
 }
 
+export interface ImportPreset {
+  key: string;
+  label: string;
+}
+
+export interface DateRange {
+  start: string;
+  end: string;
+}
+
+export interface ImportRow {
+  date: string;
+  description: string;
+  amount: number;
+  currency: string | null;
+  status: "new" | "duplicate" | "conflict";
+  existing_amount: number | null;
+  category: string;
+}
+
+export interface ImportPreview {
+  account_id: number;
+  filename: string;
+  preset: string;
+  period: DateRange;
+  parsed: number;
+  new: number;
+  duplicate: number;
+  conflict: number;
+  transfers: number;
+  gaps_before: DateRange[];
+  gaps_after: DateRange[];
+  conflicts: ImportRow[];
+  sample: ImportRow[];
+}
+
+export interface ImportResult {
+  batch_id: number;
+  imported: number;
+  duplicate: number;
+  conflict: number;
+  period: DateRange;
+  gaps: DateRange[];
+}
+
+export interface ImportBatch {
+  id: number;
+  account_id: number;
+  filename: string;
+  preset: string;
+  period_start: string;
+  period_end: string;
+  rows_parsed: number;
+  rows_imported: number;
+  rows_duplicate: number;
+  rows_conflicting: number;
+}
+
+export interface AccountCoverage {
+  account_id: number;
+  account_name: string | null;
+  account_type: string | null;
+  source: string;
+  covered: DateRange[];
+  gaps: DateRange[];
+  last_imported_period_end: string | null;
+}
+
 export interface GoalInput {
   name: string;
   target_amount: number;
@@ -157,16 +225,7 @@ export interface GoalInput {
   monthly_contribution: number;
 }
 
-async function req<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = getToken();
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init?.headers,
-    },
-  });
+async function handle<T>(res: Response): Promise<T> {
   if (res.status === 401) {
     // Token missing/expired — drop it and bounce back to the login screen.
     clearToken();
@@ -178,6 +237,32 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(`${res.status} ${res.statusText}: ${detail}`);
   }
   return res.json() as Promise<T>;
+}
+
+async function req<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getToken();
+  return handle<T>(
+    await fetch(`${BASE}${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...init?.headers,
+      },
+    }),
+  );
+}
+
+/** Multipart POST. Content-Type is left unset so the browser adds the boundary. */
+async function upload<T>(path: string, form: FormData): Promise<T> {
+  const token = getToken();
+  return handle<T>(
+    await fetch(`${BASE}${path}`, {
+      method: "POST",
+      body: form,
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }),
+  );
 }
 
 export const api = {
@@ -213,9 +298,12 @@ export const api = {
     }),
 
   investmentsSync: () =>
-    req<{ items_synced: number; items_skipped: number }>("/api/investments/sync", {
-      method: "POST",
-    }),
+    req<{
+      items_synced: number;
+      items_skipped: number;
+      holdings: number;
+      skipped_details: { institution: string; error_code: string; message: string }[];
+    }>("/api/investments/sync", { method: "POST" }),
 
   transactions: (limit = 50) =>
     req<Transaction[]>(`/api/finance/transactions?limit=${limit}`),
@@ -282,4 +370,46 @@ export const api = {
 
   deleteGoal: (id: number) =>
     req<void>(`/api/finance/goals/${id}`, { method: "DELETE" }),
+
+  // --- Manual statement import (for banks Plaid can't link, e.g. RBC) ---
+
+  importPresets: () => req<ImportPreset[]>("/api/imports/presets"),
+
+  createManualAccount: (
+    name: string,
+    type: string,
+    subtype: string | null,
+    current_balance: number | null,
+  ) =>
+    req<Account>("/api/imports/accounts", {
+      method: "POST",
+      body: JSON.stringify({ name, type, subtype, current_balance }),
+    }),
+
+  updateManualAccount: (id: number, patch: { type?: string; subtype?: string | null }) =>
+    req<Account>(`/api/imports/accounts/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
+
+  previewImport: (file: File, accountId: number, preset: string) => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("account_id", String(accountId));
+    form.append("preset", preset);
+    return upload<ImportPreview>("/api/imports/preview", form);
+  },
+
+  commitImport: (file: File, accountId: number, preset: string, includeConflicts: boolean) => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("account_id", String(accountId));
+    form.append("preset", preset);
+    form.append("include_conflicts", String(includeConflicts));
+    return upload<ImportResult>("/api/imports/commit", form);
+  },
+
+  importCoverage: () => req<AccountCoverage[]>("/api/imports/coverage"),
+
+  importBatches: () => req<ImportBatch[]>("/api/imports/batches"),
 };

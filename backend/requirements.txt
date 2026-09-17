@@ -10,6 +10,8 @@ python-dotenv==1.0.1
 apscheduler==3.11.0
 alembic==1.19.1
 itsdangerous==2.2.0
+python-multipart==0.0.20   # multipart/form-data, for statement file uploads
+openpyxl==3.1.5            # .xlsx statement exports
 
 # --- postgres (cloud DB) ---
 # Only needed when DATABASE_URL points at Postgres (e.g. Neon/Supabase); SQLite

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Budget, Transaction
-from app.routers.finance import NON_SPEND_CATEGORIES
+from app.routers.finance import IS_SPEND_CATEGORY
 from app.schemas import BudgetCreate, BudgetOut, BudgetStatus, BudgetStatusItem, BudgetUpdate
 
 router = APIRouter(prefix="/api/finance/budgets", tags=["budgets"])
@@ -80,7 +80,7 @@ def budget_status(
             Transaction.date >= start,
             Transaction.date < end,
             Transaction.amount > 0,
-            Transaction.category.notin_(NON_SPEND_CATEGORIES),
+            IS_SPEND_CATEGORY,
         )
         .group_by(Transaction.category)
         .all()

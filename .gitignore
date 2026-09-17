@@ -9,6 +9,11 @@ venv/
 .env
 backend/.env
 
+# Bank statement exports — real transaction data, never commit.
+# Deliberately not a blanket *.csv, so sanitized test fixtures can still be tracked.
+download-transactions*.csv
+statements/
+
 # Databases
 *.db
 *.sqlite3

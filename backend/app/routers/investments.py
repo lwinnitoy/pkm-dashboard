@@ -4,6 +4,7 @@ Populated from Plaid's /investments/holdings/get and /investments/transactions/g
 (e.g. for Wealthsimple). Sync is best-effort per item — items without investment
 accounts are skipped rather than failing the whole run.
 """
+import json
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Query
@@ -167,13 +168,31 @@ def sync_investments_for_item(db: Session, client, item: PlaidItem) -> dict[str,
     return counts
 
 
-def sync_all_investments(db: Session) -> dict[str, int]:
+def _plaid_error(exc: ApiException) -> tuple[str, str]:
+    """(error_code, message) from a Plaid ApiException, which carries a JSON body."""
+    try:
+        body = json.loads(exc.body or "{}")
+    except (ValueError, TypeError):
+        body = {}
+    return (
+        body.get("error_code") or "UNKNOWN",
+        body.get("error_message") or str(exc).strip()[:200],
+    )
+
+
+def sync_all_investments(db: Session) -> dict:
     """Sync holdings + investment transactions for every item, best-effort (items
     without investment accounts are skipped, not errored). Shared by the endpoint,
-    the manual sync flow, and the scheduled job."""
+    the manual sync flow, and the scheduled job.
+
+    A skipped item reports *why*. "No holdings appeared" and "this item never
+    consented to the investments product" look identical from the dashboard
+    otherwise, and only one of them is fixable by re-linking.
+    """
     client = get_plaid_client()
     totals = {"securities": 0, "holdings": 0, "investment_transactions": 0}
-    synced = skipped = 0
+    synced = 0
+    skipped: list[dict[str, str]] = []
 
     for item in db.query(PlaidItem).all():
         try:
@@ -182,12 +201,25 @@ def sync_all_investments(db: Session) -> dict[str, int]:
             synced += 1
             for k in totals:
                 totals[k] += counts[k]
-        except ApiException:
-            # Item has no investment accounts / product not supported — skip it.
+        except ApiException as exc:
+            # Usually "this item has no investment accounts" or "investments was
+            # never consented for this item" — keep going, but say which.
             db.rollback()
-            skipped += 1
+            code, message = _plaid_error(exc)
+            skipped.append(
+                {
+                    "institution": item.institution_name or f"item {item.item_id[:8]}",
+                    "error_code": code,
+                    "message": message,
+                }
+            )
 
-    return {**totals, "items_synced": synced, "items_skipped": skipped}
+    return {
+        **totals,
+        "items_synced": synced,
+        "items_skipped": len(skipped),
+        "skipped_details": skipped,
+    }
 
 
 @router.post("/sync", response_model=InvestmentsSyncResponse)

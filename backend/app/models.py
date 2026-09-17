@@ -7,6 +7,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Integer,
     String,
     UniqueConstraint,
     func,
@@ -19,6 +20,12 @@ from app.database import Base
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+# Where a row came from. Plaid rows are keyed by Plaid's ids; manual rows are keyed
+# by a content fingerprint (see app/imports/reconcile.py).
+SOURCE_PLAID = "plaid"
+SOURCE_CSV = "csv"
 
 
 class PlaidItem(Base):
@@ -42,8 +49,14 @@ class Account(Base):
     __tablename__ = "accounts"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    plaid_item_id: Mapped[int] = mapped_column(ForeignKey("plaid_items.id"))
-    plaid_account_id: Mapped[str] = mapped_column(String, unique=True, index=True)
+    # Null for manually-imported (CSV/Excel) accounts, which have no Plaid identity.
+    plaid_item_id: Mapped[int | None] = mapped_column(
+        ForeignKey("plaid_items.id"), nullable=True
+    )
+    plaid_account_id: Mapped[str | None] = mapped_column(
+        String, unique=True, index=True, nullable=True
+    )
+    source: Mapped[str] = mapped_column(String, default=SOURCE_PLAID, index=True)
     name: Mapped[str | None] = mapped_column(String, nullable=True)
     official_name: Mapped[str | None] = mapped_column(String, nullable=True)
     type: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -68,7 +81,19 @@ class Transaction(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"))
-    plaid_transaction_id: Mapped[str] = mapped_column(String, unique=True, index=True)
+    # Exactly one identity is set, per `source`: Plaid rows carry a Plaid id, manual
+    # rows carry a fingerprint. Both are unique, so re-importing an overlapping
+    # statement period is idempotent at the DB level, not just in the reconciler.
+    plaid_transaction_id: Mapped[str | None] = mapped_column(
+        String, unique=True, index=True, nullable=True
+    )
+    import_fingerprint: Mapped[str | None] = mapped_column(
+        String, unique=True, index=True, nullable=True
+    )
+    source: Mapped[str] = mapped_column(String, default=SOURCE_PLAID, index=True)
+    import_batch_id: Mapped[int | None] = mapped_column(
+        ForeignKey("import_batches.id"), nullable=True
+    )
     date: Mapped[date] = mapped_column(Date, index=True)
     name: Mapped[str | None] = mapped_column(String, nullable=True)
     merchant_name: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -80,6 +105,32 @@ class Transaction(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     account: Mapped["Account"] = relationship(back_populates="transactions")
+
+
+class ImportBatch(Base):
+    """One CSV/Excel upload committed against one account.
+
+    The `period_start`/`period_end` span is what the *file* covered, not what was
+    written — a file that was 100% duplicates still records its span, because
+    coverage ("do I have data for June?") is about the statement period, not row
+    counts. Gap detection unions these spans; see app/imports/reconcile.py.
+    """
+
+    __tablename__ = "import_batches"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
+    filename: Mapped[str] = mapped_column(String)
+    preset: Mapped[str] = mapped_column(String)  # parser preset key, e.g. "rbc"
+    period_start: Mapped[date] = mapped_column(Date, index=True)
+    period_end: Mapped[date] = mapped_column(Date, index=True)
+    rows_parsed: Mapped[int] = mapped_column(Integer, default=0)
+    rows_imported: Mapped[int] = mapped_column(Integer, default=0)
+    rows_duplicate: Mapped[int] = mapped_column(Integer, default=0)
+    rows_conflicting: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+    account: Mapped["Account"] = relationship()
 
 
 class Category(Base):

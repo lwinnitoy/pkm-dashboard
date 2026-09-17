@@ -12,7 +12,7 @@ from app.config import get_settings
 from app.database import Base, SessionLocal, engine
 from app.models import Category
 from app.plaid_client import DEFAULT_CATEGORIES
-from app.routers import auth, budgets, finance, investments, plaid
+from app.routers import auth, budgets, finance, imports, investments, plaid
 from app.scheduler import shutdown_scheduler, start_scheduler
 
 
@@ -59,6 +59,7 @@ app.include_router(plaid.router, dependencies=_protected)
 app.include_router(finance.router, dependencies=_protected)
 app.include_router(budgets.router, dependencies=_protected)
 app.include_router(investments.router, dependencies=_protected)
+app.include_router(imports.router, dependencies=_protected)
 
 
 @app.get("/health")
