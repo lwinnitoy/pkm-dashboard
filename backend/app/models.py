@@ -36,6 +36,9 @@ class PlaidItem(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     item_id: Mapped[str] = mapped_column(String, unique=True, index=True)
     access_token: Mapped[str] = mapped_column(EncryptedString)  # encrypted at rest (Fernet)
+    # Plaid's stable id for the institution. `item_id` changes every time you go
+    # through Link, so this is what identifies "the same bank, linked again".
+    institution_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
     institution_name: Mapped[str | None] = mapped_column(String, nullable=True)
     transactions_cursor: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
@@ -58,6 +61,9 @@ class Account(Base):
     )
     source: Mapped[str] = mapped_column(String, default=SOURCE_PLAID, index=True)
     name: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Last few digits of the account number. Unlike plaid_account_id this survives
+    # a re-link, so it's how an existing row is matched to its new Plaid id.
+    mask: Mapped[str | None] = mapped_column(String, nullable=True)
     official_name: Mapped[str | None] = mapped_column(String, nullable=True)
     type: Mapped[str | None] = mapped_column(String, nullable=True)
     subtype: Mapped[str | None] = mapped_column(String, nullable=True)

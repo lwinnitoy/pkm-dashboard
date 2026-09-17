@@ -10,7 +10,14 @@ from sqlalchemy.orm import Session
 from app.categorization import match_key, upsert_rule_and_apply
 from app.database import get_db
 from app.investments.portfolio import get_portfolio_value
-from app.models import Account, BalanceSnapshot, Category, Goal, Transaction
+from app.models import (
+    Account,
+    BalanceSnapshot,
+    Category,
+    Goal,
+    ImportBatch,
+    Transaction,
+)
 from app.schemas import (
     AccountOut,
     CategoryComparison,
@@ -127,7 +134,14 @@ def spending_summary(
 
 @router.get("/accounts", response_model=list[AccountOut])
 def list_accounts(db: Session = Depends(get_db)):
-    return db.query(Account).all()
+    return [
+        AccountOut.model_validate(a).model_copy(
+            update={"institution_name": a.item.institution_name if a.item else None}
+        )
+        # Ordered so the list is stable between renders — and so duplicates left
+        # by an older re-link appear oldest-first, which is the one to remove.
+        for a in db.query(Account).order_by(Account.id).all()
+    ]
 
 
 def _bucket_start(d: date, granularity: str) -> date:
@@ -137,6 +151,31 @@ def _bucket_start(d: date, granularity: str) -> date:
     if granularity == "week":
         return d - timedelta(days=d.weekday())  # Monday
     return d  # day
+
+
+@router.delete("/accounts/{account_id}", status_code=204)
+def delete_account(account_id: int, db: Session = Depends(get_db)):
+    """Remove an account and everything recorded against it.
+
+    Destructive and not recoverable from Plaid: balance snapshots are the local
+    history of a value Plaid only ever exposes as "current", so they cannot be
+    re-fetched. The parent item is dropped once its last account goes, which is
+    what clears a duplicate institution left behind by an older re-link.
+    """
+    account = db.query(Account).filter_by(id=account_id).first()
+    if account is None:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    item = account.item
+    # Rows that reference the account but aren't part of its ORM cascade.
+    db.query(BalanceSnapshot).filter_by(account_id=account.id).delete()
+    db.query(ImportBatch).filter_by(account_id=account.id).delete()
+    db.delete(account)  # cascades transactions / holdings / investment txns
+    db.flush()
+
+    if item is not None and not item.accounts:
+        db.delete(item)
+    db.commit()
 
 
 @router.get("/spending-trend", response_model=list[TrendPoint])

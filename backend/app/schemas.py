@@ -11,6 +11,9 @@ class LinkTokenResponse(BaseModel):
 class ExchangeTokenRequest(BaseModel):
     public_token: str
     institution_name: str | None = None
+    # Plaid's stable institution id. Without it a reconnect can't be told apart
+    # from a first-time link, and the institution's accounts get duplicated.
+    institution_id: str | None = None
 
 
 class SyncResponse(BaseModel):
@@ -29,6 +32,11 @@ class AccountOut(BaseModel):
     subtype: str | None
     current_balance: float | None
     currency: str | None
+    source: str = "plaid"
+    mask: str | None = None
+    # Which linked login this belongs to — the way to tell two identically-named
+    # accounts apart when an institution has been linked more than once.
+    institution_name: str | None = None
 
 
 class TransactionOut(BaseModel):

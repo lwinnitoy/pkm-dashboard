@@ -1,7 +1,6 @@
 import { useLocation } from "react-router-dom";
 import { useFinance } from "../../data/financeContext";
 import { RANGE_OPTIONS } from "../../data/financeContext";
-import PlaidLinkButton from "../PlaidLinkButton";
 import { NAV } from "./nav";
 
 function useTitle(): string {
@@ -12,7 +11,7 @@ function useTitle(): string {
 
 export default function Topbar() {
   const title = useTitle();
-  const { range, setRange, sync, syncing, refresh } = useFinance();
+  const { range, setRange } = useFinance();
 
   return (
     <header className="topbar">
@@ -29,10 +28,6 @@ export default function Topbar() {
             </button>
           ))}
         </div>
-        <PlaidLinkButton onLinked={refresh} />
-        <button className="btn" onClick={sync} disabled={syncing}>
-          {syncing ? "Syncing…" : "Sync now"}
-        </button>
       </div>
     </header>
   );
