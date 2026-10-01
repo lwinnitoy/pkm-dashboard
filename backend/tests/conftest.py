@@ -33,7 +33,7 @@ os.environ["DATABASE_URL"] = f"sqlite:///{_IMPORT_DB}"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
-from sqlalchemy import create_engine  # noqa: E402
+from sqlalchemy import create_engine, event  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
@@ -55,12 +55,15 @@ def db_engine():
 
     A StaticPool keeps a single underlying connection so the in-memory database
     is shared between the test's own session and the app's request sessions.
+    Foreign keys are enforced, as on Postgres; SQLite ignores them by default,
+    which hid a delete-ordering bug that 500'd in production.
     """
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+    event.listen(engine, "connect", lambda conn, _: conn.execute("PRAGMA foreign_keys=ON"))
     Base.metadata.create_all(bind=engine)
     try:
         yield engine

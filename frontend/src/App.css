@@ -406,6 +406,29 @@
   padding: 12px 0;
   border-bottom: 1px solid var(--border);
 }
+.account-row.is-deleting .account-name,
+.account-row.is-deleting .account-meta {
+  opacity: 0.5;
+}
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--text-muted);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 2s;
+  }
+}
 .account-row:last-child {
   border-bottom: none;
 }

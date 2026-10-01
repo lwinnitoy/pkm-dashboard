@@ -19,20 +19,20 @@ function subtitle(a: Account): string {
 export default function Accounts() {
   const { accounts, refresh, sync, syncing } = useFinance();
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function confirmDelete(id: number) {
-    setBusy(true);
+    setDeleting(id);
     setError(null);
     try {
       await api.deleteAccount(id);
       setPendingDelete(null);
       await refresh();
     } catch (e) {
-      setError(String(e));
+      setError(`Couldn't delete the account. ${e instanceof Error ? e.message : e}`);
     } finally {
-      setBusy(false);
+      setDeleting(null);
     }
   }
 
@@ -59,7 +59,11 @@ export default function Accounts() {
       ) : (
         <div>
           {accounts.map((a) => (
-            <div className="account-row" key={a.id}>
+            <div
+              className={`account-row${deleting === a.id ? " is-deleting" : ""}`}
+              key={a.id}
+              aria-busy={deleting === a.id}
+            >
               <div>
                 <div className="account-name">
                   {a.name ?? "Account"}{" "}
@@ -68,7 +72,12 @@ export default function Accounts() {
                 <div className="account-meta">{subtitle(a)}</div>
               </div>
 
-              {pendingDelete === a.id ? (
+              {deleting === a.id ? (
+                <div className="topbar-actions" role="status">
+                  <span className="spinner" aria-hidden="true" />
+                  <span className="muted">Deleting account and its history…</span>
+                </div>
+              ) : pendingDelete === a.id ? (
                 <div className="topbar-actions">
                   <span className="muted">
                     Delete this account and all of its transactions?
@@ -76,14 +85,14 @@ export default function Accounts() {
                   <button
                     className="btn btn-ghost"
                     onClick={() => setPendingDelete(null)}
-                    disabled={busy}
+                    disabled={deleting !== null}
                   >
                     Cancel
                   </button>
                   <button
                     className="link-danger"
                     onClick={() => confirmDelete(a.id)}
-                    disabled={busy}
+                    disabled={deleting !== null}
                   >
                     Delete
                   </button>
@@ -94,6 +103,7 @@ export default function Accounts() {
                   <button
                     className="link-danger"
                     onClick={() => setPendingDelete(a.id)}
+                    disabled={deleting !== null}
                     aria-label={`Remove ${a.name ?? "account"}`}
                   >
                     Remove
