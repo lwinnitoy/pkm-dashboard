@@ -69,24 +69,60 @@ def upgrade() -> None:
     op.create_index('ix_transactions_source', 'transactions', ['source'])
 
 
+def _inspector():
+    return sa.inspect(op.get_bind())
+
+
+def _fk_name(table: str, referred_table: str) -> str | None:
+    """The actual constraint name, which differs by how the table was created.
+
+    This migration names it `fk_transactions_import_batch_id`, but a database
+    bootstrapped from the models instead (SQLite dev uses `create_all`) gets the
+    backend's auto-generated name. Looking it up handles both, and returns None
+    when there's nothing to drop.
+    """
+    for fk in _inspector().get_foreign_keys(table):
+        if fk.get("referred_table") == referred_table:
+            return fk.get("name")
+    return None
+
+
+def _has_column(table: str, column: str) -> bool:
+    return any(c["name"] == column for c in _inspector().get_columns(table))
+
+
+def _has_index(table: str, index: str) -> bool:
+    return any(i["name"] == index for i in _inspector().get_indexes(table))
+
+
 def downgrade() -> None:
-    """Downgrade schema."""
-    op.drop_index('ix_transactions_source', table_name='transactions')
-    op.drop_index('ix_transactions_import_fingerprint', table_name='transactions')
+    """Downgrade schema.
+
+    Written to tolerate a partially-applied upgrade: each drop checks that its
+    target exists first. A downgrade that fails halfway leaves the schema
+    somewhere no migration describes, which is far harder to recover from than
+    a few redundant lookups.
+    """
+    for index in ('ix_transactions_source', 'ix_transactions_import_fingerprint'):
+        if _has_index('transactions', index):
+            op.drop_index(index, table_name='transactions')
+
+    constraint = _fk_name('transactions', 'import_batches')
     with op.batch_alter_table('transactions') as batch:
-        batch.drop_constraint('fk_transactions_import_batch_id', type_='foreignkey')
-        batch.drop_column('import_batch_id')
-        batch.drop_column('source')
-        batch.drop_column('import_fingerprint')
+        if constraint:
+            batch.drop_constraint(constraint, type_='foreignkey')
+        for column in ('import_batch_id', 'source', 'import_fingerprint'):
+            if _has_column('transactions', column):
+                batch.drop_column(column)
         batch.alter_column('plaid_transaction_id', existing_type=sa.String(), nullable=False)
 
-    op.drop_index('ix_accounts_source', table_name='accounts')
+    if _has_index('accounts', 'ix_accounts_source'):
+        op.drop_index('ix_accounts_source', table_name='accounts')
     with op.batch_alter_table('accounts') as batch:
-        batch.drop_column('source')
+        if _has_column('accounts', 'source'):
+            batch.drop_column('source')
         batch.alter_column('plaid_account_id', existing_type=sa.String(), nullable=False)
         batch.alter_column('plaid_item_id', existing_type=sa.Integer(), nullable=False)
 
-    op.drop_index('ix_import_batches_period_end', table_name='import_batches')
-    op.drop_index('ix_import_batches_period_start', table_name='import_batches')
-    op.drop_index('ix_import_batches_account_id', table_name='import_batches')
-    op.drop_table('import_batches')
+    if 'import_batches' in _inspector().get_table_names():
+        op.drop_table('import_batches')  # takes its indexes with it
