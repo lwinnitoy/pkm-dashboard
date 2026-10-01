@@ -22,15 +22,34 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _has_column(table: str, column: str) -> bool:
+    return any(c["name"] == column for c in sa.inspect(op.get_bind()).get_columns(table))
+
+
+def _has_index(table: str, index: str) -> bool:
+    return any(i["name"] == index for i in sa.inspect(op.get_bind()).get_indexes(table))
+
+
 def upgrade() -> None:
-    """Upgrade schema."""
-    op.add_column('plaid_items', sa.Column('institution_id', sa.String(), nullable=True))
-    op.create_index('ix_plaid_items_institution_id', 'plaid_items', ['institution_id'])
-    op.add_column('accounts', sa.Column('mask', sa.String(), nullable=True))
+    """Upgrade schema.
+
+    Each step checks first because Replit's publish step diffs the dev database
+    against production and applies the difference *before* `alembic upgrade head`
+    runs, so these objects may already exist when this migration gets to them.
+    """
+    if not _has_column('plaid_items', 'institution_id'):
+        op.add_column('plaid_items', sa.Column('institution_id', sa.String(), nullable=True))
+    if not _has_index('plaid_items', 'ix_plaid_items_institution_id'):
+        op.create_index('ix_plaid_items_institution_id', 'plaid_items', ['institution_id'])
+    if not _has_column('accounts', 'mask'):
+        op.add_column('accounts', sa.Column('mask', sa.String(), nullable=True))
 
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_column('accounts', 'mask')
-    op.drop_index('ix_plaid_items_institution_id', table_name='plaid_items')
-    op.drop_column('plaid_items', 'institution_id')
+    if _has_column('accounts', 'mask'):
+        op.drop_column('accounts', 'mask')
+    if _has_index('plaid_items', 'ix_plaid_items_institution_id'):
+        op.drop_index('ix_plaid_items_institution_id', table_name='plaid_items')
+    if _has_column('plaid_items', 'institution_id'):
+        op.drop_column('plaid_items', 'institution_id')

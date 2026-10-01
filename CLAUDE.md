@@ -9,7 +9,7 @@ transactions via Plaid, categorize them, and view spending / net worth / retirem
 projections on a dashboard. Tasks, subscriptions, and calendar modules are planned on the
 same foundation.
 
-- **Backend:** Python 3.11+ / FastAPI + SQLAlchemy 2.0 (SQLite for local dev), `plaid-python`, APScheduler
+- **Backend:** Python 3.11+ / FastAPI + SQLAlchemy 2.0 + Alembic (SQLite for local dev, Postgres via `psycopg` in the cloud), `plaid-python`, APScheduler
 - **Frontend:** React 19 + TypeScript (Vite), `react-plaid-link`, `recharts`
 
 ## Commands
@@ -32,9 +32,14 @@ SQLite dev bootstraps via `create_all` on boot, but Postgres runs `alembic upgra
 on deploy — so any model change needs a migration or cloud will drift. Use
 `op.batch_alter_table` when altering an existing column: SQLite can't `ALTER` in place.
 Verify with `alembic upgrade head && alembic check` (the latter reports model/migration drift).
+Write `downgrade()` defensively: a dev DB built by `create_all` has backend-generated
+constraint names, and a half-applied upgrade has missing objects. So look up FKs by their
+referred table (not by name) and check that each index/column exists before dropping it.
+`b1c4f7a29e3d_add_manual_statement_imports.py` has the pattern. To test a migration, run
+upgrade → downgrade base → upgrade.
 
 ```bash
-cd backend && ../.venv/bin/pytest          # 58 tests, no external services needed
+cd backend && ../.venv/bin/pytest          # 82 tests, no external services needed
 ```
 
 ### Frontend
@@ -60,8 +65,12 @@ The **frontend has no tests** — `npm run build` (tsc) and `npm run lint` are t
 Sync is **cursor-based incremental** (`/transactions/sync`): Plaid returns
 `added`/`modified`/`removed` and a `next_cursor` persisted per `PlaidItem`, so dedup is
 handled by the cursor, not by us. `sync_transactions` also calls `write_snapshots` so
-net-worth history accrues on every manual sync. Sync is currently manual (a "Sync now"
-button); the only automatic job is a daily balance snapshot.
+net-worth history accrues on every manual sync. Sync is triggered three ways, all through
+the same `sync_all_items` path: the "Sync now" button; the in-process APScheduler
+(`app/scheduler.py`), which always runs a daily balance snapshot and adds an interval sync
+when `SYNC_INTERVAL_HOURS > 0`; and `python -m app.jobs` (sync + investments + snapshot),
+for scale-to-zero hosts where the in-process scheduler can't stay up. See
+[docs/hosting.md](docs/hosting.md).
 
 ### Two Plaid data classes, two paths
 - **Cash/spending** transactions → `/transactions/sync` → `routers/plaid.py`, read via `routers/finance.py`.
@@ -123,10 +132,26 @@ Plaid `access_token` uses the `EncryptedString` SQLAlchemy type (`app/crypto.py`
 transparently Fernet-encrypted on write / decrypted on read, so the rest of the code treats
 it as a plain string. Any new sensitive column should reuse `EncryptedString`.
 
+### Auth and deployment
+Single-user auth (`app/auth.py`): when `APP_PASSWORD` is set, `/api/auth/login` issues an
+`itsdangerous`-signed bearer token, and every data router is mounted with
+`Depends(require_auth)` in `app/main.py`. When `APP_PASSWORD` is unset, auth is a no-op
+(local dev). New routers should be registered the same protected way. Only `/api/auth/*`
+and `/health` stay open.
+
+For single-port deploys (Replit), FastAPI also serves `frontend/dist` with an SPA
+fallback, registered *after* the API routers so `/api/*` takes precedence. The Docker
+image runs `alembic upgrade head` before starting uvicorn. Hosting details are in
+[docs/hosting.md](docs/hosting.md), and database setup is in
+[docs/database.md](docs/database.md).
+
 ### Data model shape (`backend/app/models.py`)
 `PlaidItem` (one linked institution login) → `Account` → `Transaction` /
-`Holding` / `InvestmentTransaction`; `Security` is referenced by holdings/txns; `Category`
-is a seed lookup for normalized categories; `BalanceSnapshot` is the daily per-account
+`Holding` / `InvestmentTransaction`. Manual accounts have no `PlaidItem`, and their
+transactions point to an `ImportBatch` instead. `Security` is referenced by holdings/txns;
+`Category` is a seed lookup for normalized categories; `CategoryRule` stores a user
+recategorization as a merchant rule, keyed by a normalized match key, so it survives
+syncs; `Budget` is a monthly limit per category; `BalanceSnapshot` is the daily per-account
 balance (Plaid only exposes *current* balance, so net-worth history accrues going forward);
 `Goal` stores retirement-target + projection assumptions only (current value is read live
 via the investments seam, never stored). Transaction `amount` follows Plaid's convention:
