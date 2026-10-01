@@ -239,6 +239,9 @@ async function handle<T>(res: Response): Promise<T> {
     const detail = await res.text().catch(() => "");
     throw new Error(`${res.status} ${res.statusText}: ${detail}`);
   }
+  // DELETEs answer 204 with no body; parsing it would throw after the request
+  // had already succeeded.
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 

@@ -27,3 +27,6 @@ frontend/.vite/
 .DS_Store
 .idea/
 .vscode/
+
+# Playwright MCP session output (screenshots, traces)
+.playwright-mcp/

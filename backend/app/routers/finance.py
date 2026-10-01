@@ -167,10 +167,14 @@ def delete_account(account_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Account not found")
 
     item = account.item
+    # Transactions go first: imported ones reference their ImportBatch, so the
+    # batches can't be deleted while they exist (Postgres enforces the FK).
+    db.query(Transaction).filter_by(account_id=account.id).delete()
     # Rows that reference the account but aren't part of its ORM cascade.
     db.query(BalanceSnapshot).filter_by(account_id=account.id).delete()
     db.query(ImportBatch).filter_by(account_id=account.id).delete()
-    db.delete(account)  # cascades transactions / holdings / investment txns
+    db.expire(account, ["transactions"])
+    db.delete(account)  # cascades holdings / investment txns
     db.flush()
 
     if item is not None and not item.accounts:

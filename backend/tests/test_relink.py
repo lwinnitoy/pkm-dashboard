@@ -162,6 +162,29 @@ def test_deleting_an_account_removes_its_dependent_rows(client, db_session):
     assert db_session.query(ImportBatch).count() == 0
 
 
+def test_deleting_an_imported_account_whose_transactions_reference_its_batch(
+    client, db_session
+):
+    account = make_account(db_session)
+    batch = ImportBatch(
+        account_id=account.id,
+        filename="x.csv",
+        preset="rbc",
+        period_start=date.today(),
+        period_end=date.today(),
+    )
+    db_session.add(batch)
+    db_session.flush()
+    txn = make_transaction(db_session, account=account, amount=5.0)
+    txn.import_batch_id = batch.id
+    db_session.commit()
+
+    assert client.delete(f"/api/finance/accounts/{account.id}").status_code == 204
+
+    assert db_session.query(Transaction).count() == 0
+    assert db_session.query(ImportBatch).count() == 0
+
+
 def test_removing_the_last_account_drops_the_empty_item(client, db_session):
     account = make_account(db_session)
     db_session.commit()
