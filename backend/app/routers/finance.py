@@ -345,8 +345,12 @@ def net_worth(
     db: Session = Depends(get_db),
 ):
     """Net worth over time from daily balance snapshots. Empty until snapshots
-    accrue (see the daily scheduler / sync). Investment holdings are added to the
-    latest point via the investments seam when available."""
+    accrue (see the daily scheduler / sync).
+
+    Investments are already in here: snapshots cover every account, and Plaid's
+    balance for an investment account is the institution's total for it. So the
+    investments seam is deliberately not added on top — that counted the whole
+    portfolio twice on the latest point."""
     since = date.today() - timedelta(days=period)
     account_type = {a.id: (a.type or "").lower() for a in db.query(Account).all()}
 
@@ -384,13 +388,6 @@ def net_worth(
                 net_worth=round(assets - liabilities, 2),
             )
         )
-
-    # Fold live investment value into the most recent point, if linked.
-    portfolio = get_portfolio_value(db)
-    if portfolio is not None and points:
-        last = points[-1]
-        last.assets = round(last.assets + portfolio, 2)
-        last.net_worth = round(last.net_worth + portfolio, 2)
 
     return points
 

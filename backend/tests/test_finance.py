@@ -5,6 +5,7 @@ negative = money in (income).
 """
 from datetime import date, timedelta
 
+from app.investments.portfolio import get_portfolio_value
 from tests.factories import (
     make_account,
     make_holding,
@@ -100,19 +101,24 @@ def test_net_worth_reflects_snapshots_and_liabilities(client, db_session):
     assert p["net_worth"] == 800.0
 
 
-def test_net_worth_folds_in_portfolio_on_latest_point(client, db_session):
-    asset = make_account(db_session, plaid_account_id="a-asset", type="depository")
+def test_net_worth_counts_investment_accounts_once(client, db_session):
+    """An investment account's snapshot already is its portfolio value (Plaid's
+    balance for it is the institution's total). Adding the investments seam on
+    top counted the whole portfolio twice on the latest point."""
+    cash = make_account(db_session, plaid_account_id="a-cash", type="depository")
+    tfsa = make_account(
+        db_session, plaid_account_id="a-tfsa", type="investment", current_balance=20960.59
+    )
+    make_holding(db_session, account=tfsa, institution_value=20960.59)
     day = date.today() - timedelta(days=1)
-    make_snapshot(db_session, account=asset, on=day, balance=1000.0)
-
-    inv = make_account(db_session, plaid_account_id="a-inv", type="investment")
-    make_holding(db_session, account=inv, institution_value=5000.0)
+    make_snapshot(db_session, account=cash, on=day, balance=1886.75)
+    make_snapshot(db_session, account=tfsa, on=day, balance=20960.59)
     db_session.commit()
+    assert get_portfolio_value(db_session) == 20960.59  # the seam does see it...
 
-    points = client.get("/api/finance/net-worth").json()
-    last = points[-1]
-    assert last["assets"] == 6000.0  # 1000 snapshot + 5000 portfolio
-    assert last["net_worth"] == 6000.0
+    last = client.get("/api/finance/net-worth").json()[-1]
+    assert last["assets"] == 22847.34  # ...but it's counted once, via the snapshot
+    assert last["net_worth"] == 22847.34
 
 
 # --------------------------------------------------------------------------- #

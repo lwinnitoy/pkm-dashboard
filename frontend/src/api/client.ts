@@ -84,21 +84,29 @@ export interface NetWorthPoint {
 export interface AccountValue {
   account_id: number;
   account_name: string | null;
-  value: number;
+  value: number | null; // null when it has neither a balance nor a priced holding
 }
 
-export interface PortfolioHolding {
+export interface AllocationSlice {
   ticker: string | null;
   security_name: string | null;
-  value: number;
+  amount: number; // measured in PortfolioSummary.allocation_basis
 }
 
 export interface PortfolioSummary {
   // total_value can be null per the app contract ("no investments linked").
   total_value: number | null;
+  cost_basis: number | null;
+  // Account values minus cost basis, so it includes any cash those accounts hold.
+  unrealized_gain: number | null;
+  unrealized_gain_pct: number | null;
   holdings_count: number;
+  priced_count: number;
+  unpriced_count: number;
   by_account: AccountValue[];
-  top_holdings: PortfolioHolding[];
+  // Market value only when every holding could be priced.
+  allocation_basis: "market_value" | "cost_basis";
+  allocation: AllocationSlice[];
 }
 
 export interface Holding {
@@ -107,10 +115,15 @@ export interface Holding {
   ticker: string | null;
   security_name: string | null;
   quantity: number | null;
+  // price/value are null when nothing could price the holding — never a fake 0.
   price: number | null;
   value: number | null;
   cost_basis: number | null;
   currency: string | null;
+  price_source: "institution" | "close_price" | "transaction" | null;
+  price_as_of: string | null;
+  gain: number | null;
+  gain_pct: number | null;
 }
 
 export interface InvestmentTransaction {

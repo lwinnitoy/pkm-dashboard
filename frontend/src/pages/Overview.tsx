@@ -12,7 +12,9 @@ export default function Overview() {
   const nw = netWorthChange(netWorth);
   const { income, spending } = cashFlowTotals(trend);
   const rate = savingsRate(income, spending);
-  const invested = portfolio && portfolio.holdings_count > 0 ? portfolio.total_value : null;
+  // total_value is null only when no investments are linked at all.
+  const invested = portfolio?.total_value ?? null;
+  const gain = portfolio?.unrealized_gain ?? null;
 
   return (
     <>
@@ -40,7 +42,16 @@ export default function Overview() {
             <MetricTile
               label="Portfolio value"
               value={currencyWhole(invested)}
-              foot={`${portfolio?.holdings_count} holdings`}
+              foot={
+                gain != null ? (
+                  <>
+                    <Delta value={portfolio?.unrealized_gain_pct} />{" "}
+                    {`${gain >= 0 ? "+" : ""}${currencyWhole(gain)} unrealized`}
+                  </>
+                ) : (
+                  `${portfolio?.holdings_count} holdings`
+                )
+              }
             />
           ) : loading ? (
             <EmptyState>Loading…</EmptyState>

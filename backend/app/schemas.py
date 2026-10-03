@@ -137,10 +137,16 @@ class HoldingOut(BaseModel):
     ticker: str | None
     security_name: str | None
     quantity: float | None
+    # Price and value are None when nothing could price the holding, never a
+    # stand-in 0 (see app/investments/valuation.py).
     price: float | None
     value: float | None
     cost_basis: float | None
     currency: str | None
+    price_source: str | None = None  # institution | close_price | transaction
+    price_as_of: date | None = None
+    gain: float | None = None  # value - cost_basis, when both are known
+    gain_pct: float | None = None
 
 
 class InvestmentTransactionOut(BaseModel):
@@ -160,20 +166,29 @@ class InvestmentTransactionOut(BaseModel):
 class AccountValue(BaseModel):
     account_id: int
     account_name: str | None
-    value: float
+    value: float | None  # None when it has neither a balance nor a priced holding
 
 
-class PortfolioHolding(BaseModel):
+class AllocationSlice(BaseModel):
     ticker: str | None
     security_name: str | None
-    value: float
+    amount: float  # measured in PortfolioSummary.allocation_basis
 
 
 class PortfolioSummary(BaseModel):
-    total_value: float
+    # Same number the investments seam returns; None = nothing linked.
+    total_value: float | None
+    cost_basis: float | None  # None unless every holding reports one
+    # Account values minus cost basis, so it includes cash those accounts hold.
+    unrealized_gain: float | None
+    unrealized_gain_pct: float | None
     holdings_count: int
+    priced_count: int
+    unpriced_count: int
     by_account: list[AccountValue]
-    top_holdings: list[PortfolioHolding]
+    # market_value when every holding is priced, else cost_basis.
+    allocation_basis: str
+    allocation: list[AllocationSlice]
 
 
 class TrendPoint(BaseModel):
