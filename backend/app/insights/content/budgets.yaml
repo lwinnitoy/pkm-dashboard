@@ -1,0 +1,183 @@
+- key: budgets.50-30-20
+  kind: learn
+  position: 10
+  title: The 50/30/20 rule
+  summary: "Split after-tax pay into 50% needs, 30% wants and 20% savings and debt payoff; treat it as a quick check, not a law."
+  body: |
+    The 50/30/20 split comes from Elizabeth Warren and Amelia Warren Tyagi's 2005 book All Your Worth. It works on **after-tax** pay, meaning what actually lands in your account:
+
+    - **50% needs:** what you'd still have to pay if your income stopped. Rent, groceries, utilities, phone, transit, insurance, minimum debt payments.
+    - **30% wants:** eating out, travel, subscriptions, upgrades.
+    - **20% savings and extra debt payments:** emergency fund, TFSA, paying a card down faster.
+
+    Example: a UVic co-op term at the average wage nets about $3,200 a month after CPP, EI and tax. That's $1,600 for needs, $960 for wants and $640 saved.
+
+    Two catches for students in Victoria. Rent alone can push needs past 50%, so read the split as a warning light rather than a rule. And co-op pay stops every four months, so apply the percentages to the steady monthly amount you pay yourself across work and study terms (see the co-op pay card below), not to a work-term paycheque.
+  sources:
+    - title: Wealthsimple — The 50/30/20 rule
+      url: https://www.wealthsimple.com/en-ca/learn/50-30-20-rule
+    - title: Open Library — All Your Worth (Warren and Warren Tyagi, 2005)
+      url: https://openlibrary.org/works/OL3008892W/All_your_worth
+
+- key: budgets.other-methods
+  kind: learn
+  position: 20
+  title: Other ways to split it
+  summary: "70/20/10, pay-yourself-first, zero-based and envelope budgets trade effort for control; the best one is the one you'll keep using."
+  body: |
+    Every method answers the same question: how much goes where, before the month starts.
+
+    - **70/20/10:** 70% for all living costs, 20% savings, 10% debt payoff or giving. Simpler than 50/30/20 because needs and wants share a bucket, which is also its weakness.
+    - **80/20, or pay yourself first:** move 20% to savings the day pay arrives, then spend the rest without tracking. Good if you hate budgeting but will keep an automatic transfer running.
+    - **Zero-based:** give every dollar a job until income minus plans equals zero. Most effort, most control; suits tight or irregular income.
+    - **Envelopes and sinking funds:** a fixed amount per category, and when it's gone, it's gone. Sinking funds are envelopes for known future costs like tuition, textbooks or a flight home, filled a little each month.
+
+    This page works like envelopes: each category gets a monthly limit and the bars show what's left. Co-op income usually needs zero-based or envelope planning for each term, with pay-yourself-first automation underneath.
+  sources:
+    - title: Experian — Types of budget plans
+      url: https://www.experian.com/blogs/ask-experian/types-of-budget-plans/
+    - title: WalletHub — The 70/20/10 budget rule
+      url: https://wallethub.com/edu/b/70-20-10-rule/144081
+    - title: NerdWallet — The 70/20/10 budget
+      url: https://www.nerdwallet.com/finance/learn/70-20-10-budget
+
+- key: budgets.coop-pay-salary
+  kind: learn
+  position: 30
+  title: Turn co-op pay into a salary
+  summary: "Spread each work term's pay evenly until your next co-op paycheque, after setting aside next term's tuition, so rent never depends on which term it is."
+  body: |
+    Co-op income arrives in four-month bursts; rent is monthly. Fix that by paying yourself a salary:
+
+    **Monthly salary = (work-term take-home + other income before your next work term − next study term's tuition and fees − co-op fee) ÷ months until your next co-op paycheque**
+
+    Worked example with UVic numbers for 2026–27:
+    - Average co-op term: about $15,700 gross, about $12,800 take-home
+    - Next study term's tuition and student fees: about $3,700 (most programs)
+    - Co-op fee: $823.72 (most programs)
+    - Months until the next paycheque: 8 (four working, four studying)
+
+    That's (12,800 − 3,700 − 824) ÷ 8, about **$1,035 a month** for everything. StudentAid BC's living allowance for a student away from home is $2,327 a month, so this student has to close the gap now (loans and grants, family, part-time work, cheaper housing), not in month seven.
+
+    Park the term's pay in a separate savings account, move the salary to chequing on the 1st, and set this page's budgets to add up to it. Don't count a tax refund until it lands.
+  sources:
+    - title: University of Victoria — Co-op salary estimates
+      url: https://www.uvic.ca/coop/hire-a-student/hiring-students/all-salaries/index.php
+    - title: University of Victoria — Undergraduate viewbook, estimated first-year fees
+      url: https://www.uvic.ca/undergraduate/_assets/docs/uvic_undergraduate_viewbook.pdf
+    - title: University of Victoria — Co-op fees
+      url: https://www.uvic.ca/coopandcareer/co-op/about-coop/fees/index.php
+
+- key: budgets.emergency-fund
+  kind: learn
+  position: 40
+  title: An emergency fund on student income
+  summary: "Start with $1,000–$2,000 you can reach in a day, then build toward three months of essential expenses, kept separate from next term's tuition."
+  body: |
+    The Financial Consumer Agency of Canada suggests 3 to 6 months of regular expenses, and says to start small rather than get discouraged. For a student, a two-step target works:
+
+    - **Starter: $1,000–$2,000,** about a month of rent. It covers a dead laptop, a dental bill or a last-minute flight home.
+    - **Full: 3 months of essential expenses.** At StudentAid BC's 2026/27 living allowance ($2,327 a month away from home) that's about $7,000. Living with family, it's far less.
+
+    Co-op adds a risk most budgets don't have: a work term that falls through means four months with no paycheque. The full fund is what covers that.
+
+    Keep it in a separate savings account you don't see every day, not invested in stocks. And keep it apart from your next-term fund. Tuition and textbooks are planned costs, not emergencies; the FCAC draws the same line.
+  sources:
+    - title: Financial Consumer Agency of Canada — Setting up an emergency fund
+      url: https://www.canada.ca/en/financial-consumer-agency/services/savings-investments/setting-up-emergency-funds.html
+    - title: StudentAid BC — 2026/27 allowances and loan maximums
+      url: https://studentaidbc.ca/sites/all/files/school-officials/allowances.pdf
+
+- key: budgets.credit-cards
+  kind: learn
+  position: 50
+  title: Credit cards without the interest
+  summary: "Pay the full statement balance every month and keep the reported balance under 30% of your limit, and a card builds credit history for free."
+  body: |
+    A credit card costs nothing if you pay the **full statement balance** by the due date: federally regulated issuers must give at least a 21-day interest-free grace period on purchases. Carry a balance and you pay interest until it's paid off in full.
+
+    The rate is steep. RBC's student cards charge **20.99%** on purchases and 22.99% on cash advances, which get no grace period at all. A $1,000 balance at 20.99% costs about $17 a month, or about $210 a year, for nothing.
+
+    For your credit score:
+    - **Payment history matters most.** Set autopay for the full statement balance so you never miss one.
+    - **Use less than 30% of your limit.** On a $1,000 limit, keep the statement balance under $300; pay mid-month if you need to.
+    - **Keep your oldest card open,** even at a $0 balance, to keep your history long.
+
+    One no-fee card with a small recurring bill on it, paid in full by autopay, builds a credit history without costing anything.
+  sources:
+    - title: Financial Consumer Agency of Canada — How credit cards work
+      url: https://www.canada.ca/en/financial-consumer-agency/services/credit-cards/credit-card-work.html
+    - title: Financial Consumer Agency of Canada — Improving your credit score
+      url: https://www.canada.ca/en/financial-consumer-agency/services/credit-reports-score/improve-credit-score.html
+    - title: RBC Royal Bank — Student credit cards
+      url: https://www.rbcroyalbank.com/credit-cards/student.html
+
+- key: budgets.coop-taxes
+  kind: learn
+  position: 60
+  title: Taxes on co-op pay
+  summary: "Payroll withholds tax as if your co-op wage lasted all year, so most co-op students are owed a refund, but only if they file."
+  body: |
+    Payroll taxes each cheque as if you'll earn that rate all year, so a $3,900-a-month co-op job is withheld like a $47,000 salary. If that one term (about $15,700) is your only 2026 income, you owe no income tax: it's under the federal basic personal amount ($16,452), and BC's credits and low-income tax reduction cancel the BC tax. The $1,700–$1,800 of tax withheld comes back when you file.
+
+    - **TD1 box:** if your total income for the year will be below your TD1 claim (basic amount plus tuition), you can tick the box that stops withholding. A second work term that year can break that.
+    - **Tuition:** UVic's T2202 is worth 14% of eligible tuition federally in 2026, plus 5.6% in BC. BC cut only its education amount, in 2019; the tuition credit remains. Unused amounts carry forward but must be used the first year you owe tax.
+    - **File anyway:** filing records RRSP room and, from age 19, gets you the Canada Groceries and Essentials Benefit (the old GST/HST credit): up to $679 a year if single.
+  sources:
+    - title: Canada Revenue Agency — Students and the CRA
+      url: https://www.canada.ca/en/revenue-agency/services/tax/individuals/segments/students.html
+    - title: Canada Revenue Agency — TD1 2026 Personal Tax Credits Return
+      url: https://www.canada.ca/en/revenue-agency/services/forms-publications/td1-personal-tax-credits-returns/td1-forms-pay-received-on-january-1-later/td1.html
+    - title: Province of British Columbia — B.C. basic personal income tax credits
+      url: https://www2.gov.bc.ca/gov/content/taxes/income-taxes/personal/credits/basic
+
+- key: budgets.victoria-costs
+  kind: learn
+  position: 70
+  title: What a year in Victoria costs
+  summary: "UVic tuition and fees run about $7,500 for two terms, and StudentAid BC budgets $2,327 a month to live away from home."
+  body: |
+    Benchmarks for 2026–27, so your budget limits start from real numbers:
+
+    - **Tuition (domestic, two terms of five courses):** $6,544 for most UVic programs, $6,683 for computer science, $7,704 for engineering. Student fees (health and dental, U-Pass, athletics) add $918.
+    - **Rent, Victoria averages (CMHC, October 2025):** studio $1,349, one-bedroom $1,625, two-bedroom $2,120, or about $1,060 each if shared. Averages include long-time tenants and rents rise more when units turn over, so new listings tend to cost more.
+    - **On campus, September to April:** double room with meal plan $14,574; pod-style single without meals $10,442.
+    - **Transit:** the U-Pass is $81 a term, included in student fees; on a co-op term you can buy it separately.
+    - **All-in benchmark:** StudentAid BC's 2026/27 living allowance, covering shelter, food, local transport and everything else, is $2,327 a month away from home or $841 at home.
+
+    Victoria's vacancy rate hit 3.3% in 2025, its highest since 1999, so there's a little more room to shop around than in recent years.
+  sources:
+    - title: University of Victoria — Undergraduate viewbook, estimated first-year fees
+      url: https://www.uvic.ca/undergraduate/_assets/docs/uvic_undergraduate_viewbook.pdf
+    - title: CMHC — Primary rental market statistics, Victoria
+      url: https://www03.cmhc-schl.gc.ca/hmip-pimh/en/Profile/DetailsPrimaryRentalMarket?geographyId=2440&t=3
+    - title: StudentAid BC — 2026/27 allowances and loan maximums
+      url: https://studentaidbc.ca/sites/all/files/school-officials/allowances.pdf
+
+- key: budgets.coop-student-plan
+  kind: learn
+  position: 80
+  title: What I'd do as a co-op student
+  summary: "On work terms, spend about half, enjoy a tenth and save the rest in a set order; on study terms, live on the salary you set."
+  body: |
+    Assumes co-op pay of $20–30 an hour; UVic's 2025/26 average, about $3,900 a month, works out to roughly $24–26.
+
+    **Work terms: about 50% needs, 10% wants, 40% saved,** in order:
+    - **Next-study-term fund,** until it covers tuition, fees and the study term's salary.
+    - **Starter emergency fund** of $1,000–$2,000.
+    - **TFSA,** in one low-cost all-in-one ETF (about 0.2% MER).
+    - **FHSA,** if buying a home within about 15 years is plausible. Room only starts once it's open; save the deduction for a higher-income year.
+    - **RRSP later,** when a deduction saves real tax (about 28% at $75,000 in BC) instead of nothing.
+
+    **Study terms: about 80% needs, 15–20% wants, 0–5% saved,** from the salary you set. Pause investing before carrying a card balance.
+
+    Why 40%: most of it is next term's living costs moved forward, and rent alone, splitting an average two-bedroom, is a third of work-term take-home. What's left once the term fund is full is real saving. Send the spring tax refund to the TFSA.
+
+    This is general information based on 2026 rules, not personal advice.
+  sources:
+    - title: University of Victoria — Co-op salary estimates
+      url: https://www.uvic.ca/coop/hire-a-student/hiring-students/all-salaries/index.php
+    - title: Canada Revenue Agency — What is a TFSA
+      url: https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/tax-free-savings-account/what.html
+    - title: Canada Revenue Agency — First Home Savings Account (FHSA)
+      url: https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/first-home-savings-account.html

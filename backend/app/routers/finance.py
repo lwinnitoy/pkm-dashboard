@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, or_
+from sqlalchemy import ColumnElement, func, or_
 from sqlalchemy.orm import Session
 
 from app.categorization import match_key, upsert_rule_and_apply
@@ -28,6 +28,7 @@ from app.schemas import (
     MerchantSpend,
     NetWorthPoint,
     SummaryResponse,
+    TransactionCount,
     TransactionOut,
     TransactionUpdate,
     TrendPoint,
@@ -49,18 +50,71 @@ IS_SPEND_CATEGORY = or_(
     Transaction.category.notin_(NON_SPEND_CATEGORIES),
 )
 
+# Group by this, not the raw column: NULL and the literal "Uncategorized" (which
+# sync and imports write) are the same bucket. Grouped separately they produce two
+# "Uncategorized" entries, and a dict keyed by name keeps only one of them.
+CATEGORY_LABEL = func.coalesce(Transaction.category, "Uncategorized")
+
+
+def _transaction_filters(
+    period: int | None = Query(
+        None, ge=1, le=1095, description="Look-back window in days; omit for all time"
+    ),
+    q: str | None = Query(None, description="Case-insensitive match on name or merchant"),
+    category: str | None = None,
+    account_id: int | None = None,
+) -> list[ColumnElement[bool]]:
+    """WHERE clauses shared by the transaction list and its count, so "Showing N
+    of M" always counts exactly the rows being paged through."""
+    clauses: list[ColumnElement[bool]] = []
+    if period is not None:
+        clauses.append(Transaction.date >= date.today() - timedelta(days=period))
+    if q and q.strip():
+        # autoescape: searching "50%" means the text, not a LIKE wildcard.
+        needle = q.strip()
+        clauses.append(
+            or_(
+                Transaction.name.icontains(needle, autoescape=True),
+                Transaction.merchant_name.icontains(needle, autoescape=True),
+            )
+        )
+    if category == "Uncategorized":
+        # Sync and imports write the literal, but the column is nullable and NULL
+        # rows are shown as "Uncategorized" everywhere, so match both.
+        clauses.append(or_(Transaction.category.is_(None), Transaction.category == category))
+    elif category:
+        clauses.append(Transaction.category == category)
+    if account_id is not None:
+        clauses.append(Transaction.account_id == account_id)
+    return clauses
+
 
 @router.get("/transactions", response_model=list[TransactionOut])
 def list_transactions(
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
-    category: str | None = None,
+    filters: list[ColumnElement[bool]] = Depends(_transaction_filters),
     db: Session = Depends(get_db),
 ):
-    query = db.query(Transaction).order_by(Transaction.date.desc(), Transaction.id.desc())
-    if category:
-        query = query.filter(Transaction.category == category)
-    return query.offset(offset).limit(limit).all()
+    return (
+        db.query(Transaction)
+        .filter(*filters)
+        .order_by(Transaction.date.desc(), Transaction.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+
+# Declared ahead of /transactions/{txn_id} so "count" is never taken for an id.
+@router.get("/transactions/count", response_model=TransactionCount)
+def count_transactions(
+    filters: list[ColumnElement[bool]] = Depends(_transaction_filters),
+    db: Session = Depends(get_db),
+):
+    """How many transactions match the list's filters, ignoring limit/offset."""
+    total = db.query(func.count(Transaction.id)).filter(*filters).scalar()
+    return TransactionCount(total=total)
 
 
 @router.patch("/transactions/{txn_id}", response_model=TransactionOut)
@@ -110,18 +164,17 @@ def spending_summary(
 
     rows = (
         db.query(
-            Transaction.category,
+            CATEGORY_LABEL,
             func.sum(Transaction.amount),
             func.count(Transaction.id),
         )
         .filter(*spend_filter)
-        .group_by(Transaction.category)
+        .group_by(CATEGORY_LABEL)
         .order_by(func.sum(Transaction.amount).desc())
         .all()
     )
     by_category = [
-        CategorySpend(category=cat or "Uncategorized", total=round(tot, 2), count=cnt)
-        for cat, tot, cnt in rows
+        CategorySpend(category=cat, total=round(tot, 2), count=cnt) for cat, tot, cnt in rows
     ]
 
     return SummaryResponse(
@@ -260,19 +313,20 @@ def category_comparison(
 
     def totals(start: date, end: date) -> dict[str, float]:
         rows = (
-            db.query(Transaction.category, func.sum(Transaction.amount))
+            db.query(CATEGORY_LABEL, func.sum(Transaction.amount))
             .filter(
                 Transaction.date >= start,
                 Transaction.date < end,
                 Transaction.amount > 0,
                 IS_SPEND_CATEGORY,
             )
-            .group_by(Transaction.category)
+            .group_by(CATEGORY_LABEL)
             .all()
         )
-        return {(cat or "Uncategorized"): float(tot) for cat, tot in rows}
+        return {cat: float(tot) for cat, tot in rows}
 
-    current = totals(cur_start, today)
+    # Through today inclusive, like every other `period` window here.
+    current = totals(cur_start, today + timedelta(days=1))
     previous = totals(prev_start, cur_start)
 
     out: list[CategoryComparison] = []
@@ -291,8 +345,12 @@ def net_worth(
     db: Session = Depends(get_db),
 ):
     """Net worth over time from daily balance snapshots. Empty until snapshots
-    accrue (see the daily scheduler / sync). Investment holdings are added to the
-    latest point via the investments seam when available."""
+    accrue (see the daily scheduler / sync).
+
+    Investments are already in here: snapshots cover every account, and Plaid's
+    balance for an investment account is the institution's total for it. So the
+    investments seam is deliberately not added on top — that counted the whole
+    portfolio twice on the latest point."""
     since = date.today() - timedelta(days=period)
     account_type = {a.id: (a.type or "").lower() for a in db.query(Account).all()}
 
@@ -330,13 +388,6 @@ def net_worth(
                 net_worth=round(assets - liabilities, 2),
             )
         )
-
-    # Fold live investment value into the most recent point, if linked.
-    portfolio = get_portfolio_value(db)
-    if portfolio is not None and points:
-        last = points[-1]
-        last.assets = round(last.assets + portfolio, 2)
-        last.net_worth = round(last.net_worth + portfolio, 2)
 
     return points
 

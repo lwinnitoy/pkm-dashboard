@@ -1,7 +1,8 @@
 """Pydantic request/response models for the API."""
-from datetime import date
+from datetime import date, datetime
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class LinkTokenResponse(BaseModel):
@@ -37,6 +38,9 @@ class AccountOut(BaseModel):
     # Which linked login this belongs to — the way to tell two identically-named
     # accounts apart when an institution has been linked more than once.
     institution_name: str | None = None
+    # Manual accounts: the date the owner's entered balance was true as of (later
+    # imports roll it forward). None for Plaid accounts.
+    balance_anchor_date: date | None = None
 
 
 class TransactionOut(BaseModel):
@@ -54,6 +58,10 @@ class TransactionOut(BaseModel):
 
 class TransactionUpdate(BaseModel):
     category: str
+
+
+class TransactionCount(BaseModel):
+    total: int  # rows matching the list's filters, ignoring limit/offset
 
 
 class CategorySpend(BaseModel):
@@ -130,10 +138,16 @@ class HoldingOut(BaseModel):
     ticker: str | None
     security_name: str | None
     quantity: float | None
+    # Price and value are None when nothing could price the holding, never a
+    # stand-in 0 (see app/investments/valuation.py).
     price: float | None
     value: float | None
     cost_basis: float | None
     currency: str | None
+    price_source: str | None = None  # institution | close_price | transaction
+    price_as_of: date | None = None
+    gain: float | None = None  # value - cost_basis, when both are known
+    gain_pct: float | None = None
 
 
 class InvestmentTransactionOut(BaseModel):
@@ -153,20 +167,29 @@ class InvestmentTransactionOut(BaseModel):
 class AccountValue(BaseModel):
     account_id: int
     account_name: str | None
-    value: float
+    value: float | None  # None when it has neither a balance nor a priced holding
 
 
-class PortfolioHolding(BaseModel):
+class AllocationSlice(BaseModel):
     ticker: str | None
     security_name: str | None
-    value: float
+    amount: float  # measured in PortfolioSummary.allocation_basis
 
 
 class PortfolioSummary(BaseModel):
-    total_value: float
+    # Same number the investments seam returns; None = nothing linked.
+    total_value: float | None
+    cost_basis: float | None  # None unless every holding reports one
+    # Account values minus cost basis, so it includes cash those accounts hold.
+    unrealized_gain: float | None
+    unrealized_gain_pct: float | None
     holdings_count: int
+    priced_count: int
+    unpriced_count: int
     by_account: list[AccountValue]
-    top_holdings: list[PortfolioHolding]
+    # market_value when every holding is priced, else cost_basis.
+    allocation_basis: str
+    allocation: list[AllocationSlice]
 
 
 class TrendPoint(BaseModel):
@@ -258,7 +281,10 @@ class ManualAccountUpdate(BaseModel):
     name: str | None = None
     type: str | None = None
     subtype: str | None = None
-    current_balance: float | None = None
+    # The balance shown in the bank's app on `balance_as_of` (default today); null
+    # clears it. Credit cards and loans: the amount owed, as a positive number.
+    balance: float | None = None
+    balance_as_of: date | None = None
 
 
 class ImportBatchOut(BaseModel):
@@ -318,3 +344,55 @@ class GoalOut(BaseModel):
     gap: float | None = None                      # projected_value - target_amount
     on_track: bool | None = None                  # projected_value >= target_amount
     required_monthly_contribution: float | None = None  # PMT to exactly hit target
+
+
+# --- Insights (learning / news / progress cards; see docs/insights.md) ---
+
+# Lowercase slug, the shape of both a page name and each half of a key.
+SLUG = r"^[a-z0-9]+(?:-[a-z0-9]+)*$"
+
+
+class InsightSource(BaseModel):
+    title: str
+    url: str
+
+
+class InsightContent(BaseModel):
+    """One card's content — the shape of a card in the seed YAML files."""
+
+    kind: str = Field("learn", pattern=SLUG)  # learn | news | progress
+    title: str = Field(min_length=1, max_length=200)
+    summary: str | None = Field(None, max_length=400)
+    body: str = ""
+    sources: list[InsightSource] = []
+    position: int = 100
+    expires_at: datetime | None = None
+
+
+class InsightWrite(InsightContent):
+    """PUT /api/insights/{key} — how a job or pipeline publishes a card.
+
+    `origin` can't be "seed": seed cards are owned by the YAML files and get
+    rewritten from them on boot, so an API-written "seed" card would be clobbered.
+    """
+
+    page: str = Field(pattern=SLUG)
+    origin: Literal["ai", "manual"] = "manual"
+    model: str | None = None  # which model wrote it, when origin == "ai"
+
+
+class InsightOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    key: str
+    page: str
+    kind: str
+    title: str
+    summary: str | None
+    body: str
+    sources: list[InsightSource]
+    position: int
+    origin: str
+    model: str | None
+    expires_at: datetime | None
+    updated_at: datetime

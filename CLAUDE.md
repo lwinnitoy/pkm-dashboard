@@ -39,7 +39,7 @@ referred table (not by name) and check that each index/column exists before drop
 upgrade → downgrade base → upgrade.
 
 ```bash
-cd backend && ../.venv/bin/pytest          # 82 tests, no external services needed
+cd backend && ../.venv/bin/pytest          # 142 tests, no external services needed
 ```
 
 ### Frontend
@@ -100,11 +100,17 @@ Because RBC can't be linked (above), `app/imports/` loads bank CSV/Excel exports
 same `Transaction` rows a sync would produce — so categories, rules, budgets and charts
 never learn there are two sources. `Account`/`Transaction` carry `source` (`plaid` | `csv`),
 and the Plaid id columns are nullable because a manual account has no Plaid identity.
+Exports carry no balance either, so a manual account's balance is an owner-entered
+*anchor* (`balance_anchor` as of `balance_anchor_date`) rolled forward by every imported
+transaction dated after it (`app/imports/balance.py`); the derived value is stored in
+`current_balance`, so snapshots and net worth read both kinds of account the same way.
 
 Two traps this path exposed, both worth knowing before touching spending queries:
 **(1)** `category NOT IN (...)` is UNKNOWN for `NULL`, so uncategorized rows get dropped
 from totals instead of counted — use the NULL-safe `IS_SPEND_CATEGORY` helper in
-`routers/finance.py`. **(2)** Importing a card *and* the account that pays it double-books
+`routers/finance.py`, and group by its `CATEGORY_LABEL` rather than the raw column (NULL
+and the literal "Uncategorized" are one bucket; grouped apart, a dict keyed by name keeps
+only one of them). **(2)** Importing a card *and* the account that pays it double-books
 every payment, so transfer-looking descriptions are auto-categorized `Transfers` and
 excluded from spend *and* income (`app/imports/categorize.py`). Account `type` also
 matters: `LIABILITY_TYPES` decides asset vs. debt, so a credit card must not be created
@@ -124,8 +130,13 @@ fingerprinting, since the ordinal scheme is load-bearing and easy to "simplify" 
 **only** surface the finance/goals code may use for investment data. See
 [docs/investments-contract.md](docs/investments-contract.md) — the signature and return
 semantics are frozen. Returning `None` (not `0.0`) means "no investments linked" so the UI
-shows an empty state instead of a misleading zero. The net-worth and goals endpoints in
-`routers/finance.py` consume it; do not import anything else across this boundary.
+shows an empty state instead of a misleading zero. The goals endpoint in
+`routers/finance.py` consumes it; do not import anything else across this boundary. Net
+worth deliberately does **not**: balance snapshots already include investment accounts'
+balances, so adding the portfolio on top would double-count. Valuation lives in
+`app/investments/valuation.py` — account value is the institution's balance, and holdings
+are priced by a fallback chain (institution → security close → last trade → unknown),
+because Wealthsimple reports zero per-holding prices through Plaid.
 
 ### Secrets at rest
 Plaid `access_token` uses the `EncryptedString` SQLAlchemy type (`app/crypto.py`) —
@@ -145,6 +156,16 @@ image runs `alembic upgrade head` before starting uvicorn. Hosting details are i
 [docs/hosting.md](docs/hosting.md), and database setup is in
 [docs/database.md](docs/database.md).
 
+### Insights (reading material on Goals and Budgets)
+The learning cards on the Goals and Budgets pages are rows in `insights`, not JSX. Shipped
+cards live in `backend/app/insights/content/<page>.yaml` and are synced on every boot
+(`_seed_insights`; best-effort, so `tests/test_insights.py` is what validates the files).
+Anything that generates content later — a scheduled AI job, a DAG elsewhere — publishes by
+key through `PUT /api/insights/{key}` or `app.insights.store.upsert_insight`; the seed
+sync never touches non-seed rows. The frontend's `InsightsPanel` only lays cards out and
+renders a small Markdown subset as React elements (never raw HTML). See
+[docs/insights.md](docs/insights.md).
+
 ### Data model shape (`backend/app/models.py`)
 `PlaidItem` (one linked institution login) → `Account` → `Transaction` /
 `Holding` / `InvestmentTransaction`. Manual accounts have no `PlaidItem`, and their
@@ -154,7 +175,8 @@ recategorization as a merchant rule, keyed by a normalized match key, so it surv
 syncs; `Budget` is a monthly limit per category; `BalanceSnapshot` is the daily per-account
 balance (Plaid only exposes *current* balance, so net-worth history accrues going forward);
 `Goal` stores retirement-target + projection assumptions only (current value is read live
-via the investments seam, never stored). Transaction `amount` follows Plaid's convention:
+via the investments seam, never stored). `Insight` is a reading-material card for a page
+(see below). Transaction `amount` follows Plaid's convention:
 **positive = money out**.
 
 ### Backend layout conventions
@@ -169,12 +191,20 @@ via the investments seam, never stored). Transaction `amount` follows Plaid's co
 ### Frontend
 Pages under `src/pages/` (one per nav entry, routed in `App.tsx` and listed in
 `components/layout/nav.ts`) composed of chart/table components in `components/`. Shared
-data comes from `FinanceProvider`/`useFinance`. All backend access goes through the typed
+data comes from `FinanceProvider`/`useFinance` (the portfolio loads with it, so nothing
+renders "not linked" before it has been asked); the Transactions page is the exception
+and pages through history itself (`/api/finance/transactions` + `/count`). Dates from the
+API are `YYYY-MM-DD` calendar dates — parse them with `parseDate` (`src/lib/dates.ts`), never
+`new Date(iso)`, which reads them as UTC midnight and shows the previous day in North
+American timezones; likewise take "today"/"this month" from `dayKey`/`monthKey`, not
+`toISOString()`. All backend access goes through the typed
 `api` object in `src/api/client.ts` (thin `fetch` wrapper) — add new endpoints there
 rather than calling `fetch` in components. Note `req()` forces a JSON content-type; file
 uploads use the separate `upload()` helper so the browser can set the multipart boundary.
 
 ## Direction
 [docs/roadmap.md](docs/roadmap.md) records planned work that isn't started — an email
-recap module and an eventual Databricks migration for the analytics layer. Consult it
+recap module, automatic transaction categorization (researched in
+[docs/auto-categorization.md](docs/auto-categorization.md)), an AI writer for the insight
+cards, and an eventual Databricks migration for the analytics layer. Consult it
 before making data-layer decisions that would be awkward to unwind.

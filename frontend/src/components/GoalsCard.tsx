@@ -11,14 +11,15 @@ import {
 } from "recharts";
 import type { Goal, GoalInput } from "../api/client";
 import { CHART } from "../lib/charts";
-import { currency, currencyCompact, currencyWhole } from "../lib/format";
+import { parseDate } from "../lib/dates";
+import { currency, currencyCompact, currencyWhole, longDate } from "../lib/format";
 import { EmptyState } from "./ui";
 
 /** Compound-growth curve mirroring the backend projection, for display only. */
 function projectionSeries(goal: Goal): { year: number; value: number }[] {
   if (goal.current_value == null) return [];
   const now = new Date();
-  const target = new Date(goal.target_date);
+  const target = parseDate(goal.target_date);
   const totalMonths = Math.max(
     0,
     (target.getFullYear() - now.getFullYear()) * 12 + (target.getMonth() - now.getMonth()),
@@ -98,12 +99,14 @@ export default function GoalsCard({
           </label>
           <label>
             Return %/yr
+            {/* Typed as a percent; the API stores a fraction (6 → 0.06). Typing
+                "6" used to mean 600%. */}
             <input
               type="number"
-              step="0.01"
-              value={form.expected_annual_return}
+              step="0.1"
+              value={Math.round(form.expected_annual_return * 10000) / 100}
               onChange={(e) =>
-                setForm({ ...form, expected_annual_return: Number(e.target.value) })
+                setForm({ ...form, expected_annual_return: Number(e.target.value) / 100 })
               }
             />
           </label>
@@ -135,7 +138,7 @@ export default function GoalsCard({
               <div>
                 <strong>{g.name}</strong>{" "}
                 <span className="muted">
-                  {currencyWhole(g.target_amount)} by {g.target_date}
+                  {currencyWhole(g.target_amount)} by {longDate(g.target_date)}
                 </span>
               </div>
               <button className="link-danger" onClick={() => onDelete(g.id)}>

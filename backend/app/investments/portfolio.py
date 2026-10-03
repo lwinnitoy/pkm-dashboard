@@ -1,22 +1,23 @@
 """Investments integration seam.
 
 This module is the ONLY surface the finance/goals code depends on for investment
-data (see docs/investments-contract.md). It mirrors the total computed by the
-investments router's /portfolio endpoint (sum of holdings' institution_value).
+data (see docs/investments-contract.md). Its total is the same number the
+investments router's /portfolio endpoint reports as `total_value`: both come
+from `value_portfolio`, so the two can't drift apart.
 """
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models import Holding
+from app.investments.valuation import value_portfolio
 
 
 def get_portfolio_value(db: Session) -> float | None:
-    """Total current market value across all investment holdings.
+    """Total current value across all investment accounts.
 
-    Returns None when no holdings are linked yet, so callers can show a
-    "connect investments" empty state rather than a misleading $0 line.
+    Each account counts at its institution-reported balance (uninvested cash
+    included), or at the sum of its priced holdings when it has no balance.
+    Returns None when no investments are linked (no investment accounts and no
+    holdings), so callers can show a "connect investments" empty state rather
+    than a misleading $0 line.
     """
-    if db.query(Holding.id).first() is None:
-        return None
-    total = db.query(func.coalesce(func.sum(Holding.institution_value), 0.0)).scalar()
-    return round(float(total), 2)
+    total = value_portfolio(db).total_value
+    return None if total is None else round(total, 2)

@@ -1,0 +1,179 @@
+- key: goals.how-much-is-enough
+  kind: learn
+  position: 10
+  title: "How much is \"enough\"?"
+  summary: "A common target is 25× the yearly spending your savings must cover (the 4% rule in reverse), after counting what CPP and OAS pay."
+  body: |
+    The usual shortcut is **25× the yearly spending your savings must cover**. Need $40,000 a year from your portfolio? The target is $1,000,000.
+
+    That's the 4% rule in reverse. It comes from William Bengen's 1994 study of US market history: a retiree who withdrew 4% in year one, then raised the dollar amount with inflation, never ran out of money within 30 years.
+
+    Caveats:
+    - **It's US data.** Wade Pfau reran the test on 17 countries back to 1900. A 4% withdrawal survived every 30-year stretch in only four of them. Canada did best, at about 4.4%.
+    - **30 years is the test window.** FP Canada's 2026 tables give a 70-year-old a 25% chance of reaching 94 (men) or 96 (women). Retire earlier and plan on something closer to 3.5% (about 29×).
+    - **No fees.** Pfau's numbers assume none; a 1–2% fee eats a big share of a 4% withdrawal.
+
+    The other yardstick: Canada.ca says most people need **60–70% of their pre-retirement income**. Count CPP and OAS first, then apply 25× to the gap.
+  sources:
+    - title: Wade Pfau (2010), Journal of Financial Planning — An International Perspective on Safe Withdrawal Rates
+      url: https://www.financialplanningassociation.org/sites/default/files/2021-10/DEC10%20JFP%20Pfau%20PDF.pdf
+    - title: FP Canada and Institute of Financial Planning — 2026 Projection Assumption Guidelines
+      url: https://www.fpcanada.ca/docs/professionalsitelibraries/standards/projection-assumption-guidelines.pdf
+    - title: Government of Canada — Prepare for retirement
+      url: https://www.canada.ca/en/services/life-events/retirement/prepare.html
+
+- key: goals.government-pensions
+  kind: learn
+  position: 20
+  title: What CPP and OAS will cover
+  summary: "CPP and OAS give most retirees roughly $19,000–$27,000 a year in today's dollars; your own savings only have to fund the rest."
+  body: |
+    Public pensions are the floor your savings sit on. 2026 figures:
+
+    - **CPP** (built from payroll contributions): up to **$1,507.65 a month** for a new pension at 65. The average new pension at 65 is **$858.34**.
+    - **OAS** (based on years lived in Canada, not earnings): up to **$762.50 a month** at ages 65–74 (October–December 2026). It's clawed back at 15% of net income above $93,454.
+    - **GIS** (low-income top-up): up to **$1,138.90 a month** for a single senior with income under $23,112.
+
+    CPP rises with inflation every January and OAS every quarter, so you can plan in today's dollars.
+
+    Worked example: you want $50,000 a year at 65. Average CPP plus full OAS is about $19,450 a year, leaving $30,550 for savings to cover. At 25×, that's about **$764,000**. With maximum CPP, public pensions cover about $27,240 and the target drops to about **$569,000**.
+
+    You'll likely get more CPP than today's retirees: the enhancement that started in 2019 raises the pension for people who contribute under it for their whole career.
+  sources:
+    - title: Government of Canada — CPP retirement pension, how much you could receive
+      url: https://www.canada.ca/en/services/benefits/publicpensions/cpp/cpp-benefit/amount.html
+    - title: Government of Canada — Old Age Security payment amounts
+      url: https://www.canada.ca/en/services/benefits/publicpensions/cpp/old-age-security/payments.html
+    - title: Government of Canada — OAS pension recovery tax
+      url: https://www.canada.ca/en/services/benefits/publicpensions/cpp/old-age-security/recovery-tax.html
+
+- key: goals.savings-rate
+  kind: learn
+  position: 30
+  title: Savings rate beats returns
+  summary: "The share of take-home pay you save sets your retirement timeline far more than the return you earn."
+  body: |
+    Your savings rate does two jobs: it fills the pot, and it shrinks the target, because you're proving you can live on less.
+
+    Starting from zero, earning 5% a year after inflation and retiring on a 4% withdrawal, the years of work needed are about:
+    - **10% saved:** 51 years
+    - **25% saved:** 32 years
+    - **50% saved:** 17 years
+
+    Compare the levers. At a 25% savings rate, earning 6% instead of 4% after inflation (a big gap, and one you don't control) saves about 6 years. Going from 25% to 50% saved saves about 15.
+
+    For a co-op student, measure it over a whole work/study year, not one month: everything that went into savings and investments, divided by total take-home pay. Money set aside for next term's tuition doesn't count. That's spending you've scheduled, not saving.
+
+    The table follows Mr. Money Mustache's 2012 early-retirement math; the figures here are recomputed with its stated assumptions.
+  sources:
+    - title: Mr. Money Mustache — The Shockingly Simple Math Behind Early Retirement
+      url: https://www.mrmoneymustache.com/2012/01/13/the-shockingly-simple-math-behind-early-retirement/
+
+- key: goals.start-early
+  kind: learn
+  position: 40
+  title: Starting at 22 vs. 32
+  summary: "Ten extra years of $200 a month costs $24,000 and is worth about $107,000 by 65, because the earliest dollars compound the longest."
+  body: |
+    Same habit, different start date. Assume $200 a month and a 4% return after inflation and fees, roughly what FP Canada's 2026 guidelines imply for a low-cost global stock ETF. All figures are in today's dollars.
+
+    - **Start at 22, invest until 65:** you put in $103,200 and end with about **$270,000**.
+    - **Start at 32, invest until 65:** you put in $79,200 and end with about **$162,000**.
+
+    The ten-year head start costs $24,000 and is worth about $107,000. Put differently: invest $200 a month only from 22 to 32, never add another dollar, and it still grows to about $107,000 by 65.
+
+    That's why small amounts from co-op terms matter more than they look. A dollar invested at 22 has 43 years to compound; a dollar invested at 45 has 20.
+
+    Returns aren't guaranteed, and markets will drop along the way. The gap between the two starting points exists at any positive return, and grows with higher ones.
+  sources:
+    - title: FP Canada and Institute of Financial Planning — 2026 Projection Assumption Guidelines
+      url: https://www.fpcanada.ca/docs/professionalsitelibraries/standards/projection-assumption-guidelines.pdf
+    - title: BlackRock Canada — iShares Core Equity ETF Portfolio (XEQT)
+      url: https://www.blackrock.com/ca/investors/en/products/309480/ishares-core-equity-etf-portfolio
+
+- key: goals.milestones-by-age
+  kind: learn
+  position: 50
+  title: Savings milestones by age
+  summary: "1× your salary by 30 and 3× by 40 are a useful check once you're on a full-time salary; as a student, watch your savings rate instead."
+  body: |
+    Fidelity's well-known benchmarks: have **1× your salary saved by 30, 3× by 40, 6× by 50, 8× by 60 and 10× by 67**.
+
+    They're the output of a specific plan: save 15% of income every year from age 25, keep more than half in stocks, retire at 67, and have savings replace 45% of pre-retirement income. In the US, Social Security fills much of the rest; in Canada, CPP and OAS play that role.
+
+    Why they don't fit a student yet:
+    - Your "salary" swings between $0 in study terms and about $3,900 a month on an average UVic co-op term, so a multiple of it is noise.
+    - Early on, what you put in matters far more than investment growth.
+    - The milestones follow from the input, not the other way around.
+
+    So track the input: your savings rate over a full work/study year. Start using the milestones as a check once you're on a full-time salary. They're what saving about 15% for decades looks like from the outside.
+  sources:
+    - title: Fidelity — How much do I need to retire?
+      url: https://www.fidelity.com/viewpoints/retirement/how-much-do-i-need-to-retire
+    - title: University of Victoria — Co-op salary estimates
+      url: https://www.uvic.ca/coop/hire-a-student/hiring-students/all-salaries/index.php
+
+- key: goals.tfsa-fhsa-rrsp
+  kind: learn
+  position: 60
+  title: TFSA, FHSA or RRSP first?
+  summary: "On student income, a TFSA usually comes first, an FHSA is worth opening if a home is plausible, and RRSP deductions pay off later."
+  body: |
+    2026 rules, in the order that usually fits a student income:
+
+    - **TFSA:** $7,000 of new room in 2026. Room builds from the year you turn 18, opened or not; turned 18 in 2022 and never contributed? You have $33,500. No deduction, but growth and withdrawals are tax-free, withdrawals come back as room next January, and they don't reduce income-tested benefits like GIS.
+    - **FHSA:** $8,000 a year, $40,000 lifetime, but room only starts once you open one, and at most $8,000 carries forward. Contributions are deductible (you can save the deduction for a later year), and a qualifying home-purchase withdrawal is tax-free. No home? Transfer it to an RRSP without using RRSP room.
+    - **RRSP:** room is 18% of last year's earned income (2026 cap: $33,810), so a $15,700 co-op term adds about $2,800. Unused room carries forward.
+
+    Why RRSP last: on one co-op term's income you owe no income tax, so a deduction saves nothing. At $75,000 in BC, each $1,000 deducted saves about $282.
+  sources:
+    - title: Canada Revenue Agency — TFSA, RRSP and other registered plan limits
+      url: https://www.canada.ca/en/revenue-agency/services/tax/registered-plans-administrators/pspa/mp-rrsp-dpsp-tfsa-limits-ympe.html
+    - title: Canada Revenue Agency — Participating in your FHSAs
+      url: https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/first-home-savings-account/contributing-your-fhsa.html
+    - title: Canada Revenue Agency — What is a TFSA
+      url: https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/tax-free-savings-account/what.html
+
+- key: goals.fees
+  kind: learn
+  position: 70
+  title: Fees compound too
+  summary: "Over 40 years, a 2% fund fee can cost more than everything you contributed, compared with a roughly 0.2% all-in-one ETF."
+  body: |
+    A fund's fee (its MER) comes out of your balance every year without a bill, so it compounds against you the same way returns compound for you. FP Canada's 2026 guidelines put typical fees at 0.5% to 2.5% a year and say they must be subtracted from any return assumption.
+
+    Worked example: $200 a month for 40 years, markets earning 6% a year before fees.
+    - **About 0.2% fee** (an all-in-one ETF such as XEQT, MER 0.19%): about **$364,000**
+    - **2% fee** (near the top of that typical range): about **$233,000**
+
+    Same $96,000 contributed, same markets. The fee gap costs about **$131,000**, more than you put in.
+
+    On Wealthsimple, self-directed stock and ETF trades are commission-free, so a single ETF costs you only its MER. Managed portfolios add a 0.5% management fee (Core tier) on top of their funds' own MERs. That's still far below 2%, but the gap compounds the same way.
+  sources:
+    - title: FP Canada and Institute of Financial Planning — 2026 Projection Assumption Guidelines
+      url: https://www.fpcanada.ca/docs/professionalsitelibraries/standards/projection-assumption-guidelines.pdf
+    - title: BlackRock Canada — iShares Core Equity ETF Portfolio (XEQT)
+      url: https://www.blackrock.com/ca/investors/en/products/309480/ishares-core-equity-etf-portfolio
+    - title: Wealthsimple — Managed investing fee schedules
+      url: https://www.wealthsimple.com/en-ca/legal/fees/invest
+
+- key: goals.projection-assumptions
+  kind: learn
+  position: 80
+  title: What this projection assumes
+  summary: "The chart grows your balance at one steady return with no inflation, fees or taxes, so a nominal return needs a target in future dollars."
+  body: |
+    The projection takes your current investment balance and monthly contribution and compounds both monthly at one fixed annual return (6% unless you change it) until the target date. It doesn't model inflation, fees, taxes, rising contributions or market swings.
+
+    So the return you enter matters:
+    - **Nominal return, like the 6% default:** the result is in future dollars, so your target should be too. At 2.1% inflation, $1,000,000 in 40 years buys what about $435,000 buys today.
+    - **Real return (after inflation and fees):** keep the target in today's dollars, which is easier to reason about.
+
+    For reference, FP Canada's April 2026 guidelines assume 2.1% inflation and, before fees, 6.3% for Canadian stocks, 6.4% US, 6.6% international developed, 7.5% emerging markets and 3.2% for bonds. A low-cost global stock ETF works out to roughly 6.3% after fees, about 4% real. Their example half-stock portfolio nets 3.5% after 1.3% fees, before inflation.
+
+    So 6% nominal is fair for an all-stock, low-fee portfolio and optimistic for anything with bonds or higher fees.
+  sources:
+    - title: FP Canada and Institute of Financial Planning — 2026 Projection Assumption Guidelines
+      url: https://www.fpcanada.ca/docs/professionalsitelibraries/standards/projection-assumption-guidelines.pdf
+    - title: FP Canada — Projection Assumption Guidelines (landing page)
+      url: https://www.fpcanada.ca/projection-assumption-guidelines

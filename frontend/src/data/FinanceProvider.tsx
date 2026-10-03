@@ -30,6 +30,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [trend, setTrend] = useState<TrendPoint[]>([]);
+  const [trendGranularity, setTrendGranularity] = useState(granularityFor(180));
   const [merchants, setMerchants] = useState<MerchantSpend[]>([]);
   const [comparison, setComparison] = useState<CategoryComparison[]>([]);
   const [netWorth, setNetWorth] = useState<NetWorthPoint[]>([]);
@@ -39,39 +40,40 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
 
   const refresh = useCallback(async () => {
     setError(null);
+    const granularity = granularityFor(range);
     try {
-      const [s, t, a, tr, m, c, nw, g, cats] = await Promise.all([
+      const [s, t, a, tr, m, c, nw, g, cats, pf] = await Promise.all([
         api.summary(range),
-        api.transactions(100),
+        // Just enough for the Overview's "Recent transactions" card; the
+        // Transactions page pages through full history on its own.
+        api.transactions(6),
         api.accounts(),
-        api.spendingTrend(range, granularityFor(range)),
+        api.spendingTrend(range, granularity),
         api.topMerchants(range, 10),
         api.categoryComparison(range),
         api.netWorth(range),
         api.goals(),
         api.categories(),
+        // Investments are optional, so a failure here mustn't fail the dashboard.
+        // But they load with everything else: fetched afterwards, pages showed
+        // "no investments linked" until the portfolio arrived.
+        api.investmentsPortfolio().catch(() => null),
       ]);
       setSummary(s);
       setTransactions(t);
       setAccounts(a);
       setTrend(tr);
+      setTrendGranularity(granularity);
       setMerchants(m);
       setComparison(c);
       setNetWorth(nw);
       setGoals(g);
       setCategories(cats);
+      setPortfolio(pf);
     } catch (e) {
       setError(String(e));
     } finally {
       setLoading(false);
-    }
-
-    // Investments are optional — isolate so an unlinked/empty state never breaks
-    // the page.
-    try {
-      setPortfolio(await api.investmentsPortfolio());
-    } catch {
-      setPortfolio(null);
     }
   }, [range]);
 
@@ -103,14 +105,6 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     }
   }, [refresh]);
 
-  const recategorize = useCallback(
-    async (id: number, category: string) => {
-      await api.recategorize(id, category);
-      await refresh(); // a merchant rule can reassign several transactions
-    },
-    [refresh],
-  );
-
   const createGoal = useCallback(
     async (g: GoalInput) => {
       await api.createGoal(g);
@@ -140,6 +134,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         transactions,
         accounts,
         trend,
+        trendGranularity,
         merchants,
         comparison,
         netWorth,
@@ -148,7 +143,6 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         categories,
         refresh,
         sync,
-        recategorize,
         createGoal,
         deleteGoal,
       }}

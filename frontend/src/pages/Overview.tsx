@@ -7,12 +7,14 @@ import { cashFlowTotals, netWorthChange, savingsRate } from "../lib/derive";
 import { currency, currencyWhole, percent } from "../lib/format";
 
 export default function Overview() {
-  const { netWorth, trend, summary, transactions, portfolio } = useFinance();
+  const { netWorth, trend, summary, transactions, portfolio, loading } = useFinance();
 
   const nw = netWorthChange(netWorth);
   const { income, spending } = cashFlowTotals(trend);
   const rate = savingsRate(income, spending);
-  const invested = portfolio && portfolio.holdings_count > 0 ? portfolio.total_value : null;
+  // total_value is null only when no investments are linked at all.
+  const invested = portfolio?.total_value ?? null;
+  const gain = portfolio?.unrealized_gain ?? null;
 
   return (
     <>
@@ -40,8 +42,19 @@ export default function Overview() {
             <MetricTile
               label="Portfolio value"
               value={currencyWhole(invested)}
-              foot={`${portfolio?.holdings_count} holdings`}
+              foot={
+                gain != null ? (
+                  <>
+                    <Delta value={portfolio?.unrealized_gain_pct} />{" "}
+                    {`${gain >= 0 ? "+" : ""}${currencyWhole(gain)} unrealized`}
+                  </>
+                ) : (
+                  `${portfolio?.holdings_count} holdings`
+                )
+              }
             />
+          ) : loading ? (
+            <EmptyState>Loading…</EmptyState>
           ) : (
             <EmptyState>
               No investments linked. <Link to="/accounts">Connect an account</Link>.
@@ -61,7 +74,11 @@ export default function Overview() {
           <MetricTile
             label="Savings rate"
             value={rate == null ? "—" : percent(rate)}
-            foot={`${currency(income - spending)} kept`}
+            foot={
+              income >= spending
+                ? `${currency(income - spending)} kept`
+                : `${currency(spending - income)} more spent than earned`
+            }
           />
         </Card>
       </div>

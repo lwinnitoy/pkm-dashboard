@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Budget, Transaction
-from app.routers.finance import IS_SPEND_CATEGORY
+from app.routers.finance import CATEGORY_LABEL, IS_SPEND_CATEGORY
 from app.schemas import BudgetCreate, BudgetOut, BudgetStatus, BudgetStatusItem, BudgetUpdate
 
 router = APIRouter(prefix="/api/finance/budgets", tags=["budgets"])
@@ -75,17 +75,17 @@ def budget_status(
     start, end = _month_bounds(month)
 
     rows = (
-        db.query(Transaction.category, func.coalesce(func.sum(Transaction.amount), 0.0))
+        db.query(CATEGORY_LABEL, func.coalesce(func.sum(Transaction.amount), 0.0))
         .filter(
             Transaction.date >= start,
             Transaction.date < end,
             Transaction.amount > 0,
             IS_SPEND_CATEGORY,
         )
-        .group_by(Transaction.category)
+        .group_by(CATEGORY_LABEL)
         .all()
     )
-    spent_by_cat = {(cat or "Uncategorized"): round(float(tot), 2) for cat, tot in rows}
+    spent_by_cat = {cat: round(float(tot), 2) for cat, tot in rows}
 
     budgets = db.query(Budget).all()
     items: list[BudgetStatusItem] = []

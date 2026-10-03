@@ -5,7 +5,7 @@ Populated from Plaid's /investments/holdings/get and /investments/transactions/g
 accounts are skipped rather than failing the whole run.
 """
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Query
 from plaid.exceptions import ApiException
@@ -16,18 +16,18 @@ from plaid.model.investments_transactions_get_request import (
 from plaid.model.investments_transactions_get_request_options import (
     InvestmentsTransactionsGetRequestOptions,
 )
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.investments.valuation import HoldingValuation, value_portfolio
 from app.models import Account, Holding, InvestmentTransaction, PlaidItem, Security
 from app.plaid_client import get_plaid_client
 from app.schemas import (
     AccountValue,
+    AllocationSlice,
     HoldingOut,
     InvestmentsSyncResponse,
     InvestmentTransactionOut,
-    PortfolioHolding,
     PortfolioSummary,
 )
 
@@ -97,6 +97,9 @@ def sync_investments_for_item(db: Session, client, item: PlaidItem) -> dict[str,
             institution_value=getattr(h, "institution_value", None),
             cost_basis=getattr(h, "cost_basis", None),
             currency=getattr(h, "iso_currency_code", None),
+            # The as-of date reported for an institution price, so it has to move
+            # on every sync, not just when the row is first created.
+            updated_at=datetime.now(timezone.utc),
         )
         if existing is None:
             db.add(Holding(account_id=account_id, security_id=security.id, **values))
@@ -227,28 +230,38 @@ def sync_investments(db: Session = Depends(get_db)):
     return InvestmentsSyncResponse(**sync_all_investments(db))
 
 
+def _rounded(x: float | None) -> float | None:
+    return None if x is None else round(x, 2)
+
+
+def _holding_order(h: HoldingValuation) -> tuple[bool, float]:
+    """Priced holdings first, largest first; then unpriced ones by what they cost."""
+    if h.value is not None:
+        return (False, -h.value)
+    return (True, -(h.cost_basis or 0.0))
+
+
 @router.get("/holdings", response_model=list[HoldingOut])
 def list_holdings(db: Session = Depends(get_db)):
-    rows = (
-        db.query(Holding, Account, Security)
-        .join(Account, Holding.account_id == Account.id)
-        .join(Security, Holding.security_id == Security.id)
-        .order_by(Holding.institution_value.desc().nullslast())
-        .all()
-    )
+    rows = [(a.account, h) for a in value_portfolio(db).accounts for h in a.holdings]
+    rows.sort(key=lambda row: _holding_order(row[1]))
     return [
         HoldingOut(
             account_id=acct.id,
             account_name=acct.name,
-            ticker=sec.ticker_symbol,
-            security_name=sec.name,
-            quantity=h.quantity,
-            price=h.institution_price,
-            value=h.institution_value,
+            ticker=h.security.ticker_symbol,
+            security_name=h.security.name,
+            quantity=h.holding.quantity,
+            price=h.price,
+            value=_rounded(h.value),
             cost_basis=h.cost_basis,
-            currency=h.currency,
+            currency=h.holding.currency,
+            price_source=h.price_source,
+            price_as_of=h.price_as_of,
+            gain=_rounded(h.gain),
+            gain_pct=_rounded(h.gain_pct),
         )
-        for h, acct, sec in rows
+        for acct, h in rows
     ]
 
 
@@ -288,44 +301,32 @@ def list_investment_transactions(
 
 @router.get("/portfolio", response_model=PortfolioSummary)
 def portfolio_summary(db: Session = Depends(get_db)):
-    total = db.query(
-        func.coalesce(func.sum(Holding.institution_value), 0.0)
-    ).scalar()
-
-    by_account_rows = (
-        db.query(
-            Account.id,
-            Account.name,
-            func.coalesce(func.sum(Holding.institution_value), 0.0),
-        )
-        .join(Holding, Holding.account_id == Account.id)
-        .group_by(Account.id, Account.name)
-        .order_by(func.sum(Holding.institution_value).desc())
-        .all()
+    """Portfolio totals. `total_value` is the same figure the investments seam
+    gives goals: both read it from `value_portfolio`, so they can't drift."""
+    valuation = value_portfolio(db)
+    holdings_count = len(valuation.holdings)
+    by_account = sorted(
+        valuation.accounts, key=lambda a: (a.value is None, -(a.value or 0.0))
     )
-
-    top_rows = (
-        db.query(
-            Security.ticker_symbol,
-            Security.name,
-            func.coalesce(func.sum(Holding.institution_value), 0.0),
-        )
-        .join(Holding, Holding.security_id == Security.id)
-        .group_by(Security.id, Security.ticker_symbol, Security.name)
-        .order_by(func.sum(Holding.institution_value).desc())
-        .limit(10)
-        .all()
-    )
-
     return PortfolioSummary(
-        total_value=round(total, 2),
-        holdings_count=db.query(func.count(Holding.id)).scalar(),
+        total_value=_rounded(valuation.total_value),
+        cost_basis=_rounded(valuation.cost_basis),
+        unrealized_gain=_rounded(valuation.unrealized_gain),
+        unrealized_gain_pct=_rounded(valuation.unrealized_gain_pct),
+        holdings_count=holdings_count,
+        priced_count=valuation.priced_count,
+        unpriced_count=holdings_count - valuation.priced_count,
         by_account=[
-            AccountValue(account_id=aid, account_name=name, value=round(val, 2))
-            for aid, name, val in by_account_rows
+            AccountValue(
+                account_id=a.account.id, account_name=a.account.name, value=_rounded(a.value)
+            )
+            for a in by_account
         ],
-        top_holdings=[
-            PortfolioHolding(ticker=tk, security_name=nm, value=round(val, 2))
-            for tk, nm, val in top_rows
+        allocation_basis=valuation.allocation_basis,
+        allocation=[
+            AllocationSlice(
+                ticker=sec.ticker_symbol, security_name=sec.name, amount=round(amount, 2)
+            )
+            for sec, amount in valuation.allocation()
         ],
     )

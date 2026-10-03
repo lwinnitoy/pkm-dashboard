@@ -9,10 +9,16 @@ export function cashFlowTotals(trend: TrendPoint[]): { income: number; spending:
   );
 }
 
-/** Percentage of income kept. Null when there's no income to divide by. */
+/**
+ * Percentage of income kept. Null when there's no income to divide by — or so
+ * little that the ratio is noise: a study-term month with $2.50 of interest
+ * against $3k of spending read as "-127,709%". Below -100% (spending more than
+ * twice income) the dollar figure says more than any percentage.
+ */
 export function savingsRate(income: number, spending: number): number | null {
   if (income <= 0) return null;
-  return ((income - spending) / income) * 100;
+  const rate = ((income - spending) / income) * 100;
+  return rate < -100 ? null : rate;
 }
 
 export interface NetWorthChange {

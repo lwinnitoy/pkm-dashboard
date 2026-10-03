@@ -18,6 +18,14 @@ export interface Transaction {
   pending: boolean;
 }
 
+/** Filters shared by the transaction list and its count; omitted = unfiltered. */
+export interface TransactionFilters {
+  period?: number; // look-back in days; omitted = all time
+  q?: string; // case-insensitive match on description or merchant
+  category?: string; // "Uncategorized" also matches rows with no category
+  account_id?: number;
+}
+
 export interface CategorySpend {
   category: string;
   total: number;
@@ -42,6 +50,9 @@ export interface Account {
   source: string;
   mask: string | null;
   institution_name: string | null;
+  // Manual accounts: the date the entered balance was true on; imports after it
+  // roll the balance forward. Null for Plaid accounts.
+  balance_anchor_date: string | null;
 }
 
 export interface TrendPoint {
@@ -73,21 +84,29 @@ export interface NetWorthPoint {
 export interface AccountValue {
   account_id: number;
   account_name: string | null;
-  value: number;
+  value: number | null; // null when it has neither a balance nor a priced holding
 }
 
-export interface PortfolioHolding {
+export interface AllocationSlice {
   ticker: string | null;
   security_name: string | null;
-  value: number;
+  amount: number; // measured in PortfolioSummary.allocation_basis
 }
 
 export interface PortfolioSummary {
   // total_value can be null per the app contract ("no investments linked").
   total_value: number | null;
+  cost_basis: number | null;
+  // Account values minus cost basis, so it includes any cash those accounts hold.
+  unrealized_gain: number | null;
+  unrealized_gain_pct: number | null;
   holdings_count: number;
+  priced_count: number;
+  unpriced_count: number;
   by_account: AccountValue[];
-  top_holdings: PortfolioHolding[];
+  // Market value only when every holding could be priced.
+  allocation_basis: "market_value" | "cost_basis";
+  allocation: AllocationSlice[];
 }
 
 export interface Holding {
@@ -96,10 +115,15 @@ export interface Holding {
   ticker: string | null;
   security_name: string | null;
   quantity: number | null;
+  // price/value are null when nothing could price the holding — never a fake 0.
   price: number | null;
   value: number | null;
   cost_basis: number | null;
   currency: string | null;
+  price_source: "institution" | "close_price" | "transaction" | null;
+  price_as_of: string | null;
+  gain: number | null;
+  gain_pct: number | null;
 }
 
 export interface InvestmentTransaction {
@@ -228,6 +252,22 @@ export interface GoalInput {
   monthly_contribution: number;
 }
 
+/** A reading-material card for a page (see docs/insights.md). */
+export interface Insight {
+  key: string;
+  page: string;
+  kind: string; // "learn" | "news" | "progress"; unknown kinds still render
+  title: string;
+  summary: string | null;
+  body: string; // paragraphs, "- " bullets and **bold** only
+  sources: { title: string; url: string }[];
+  position: number;
+  origin: string; // "seed" | "ai" | "manual"
+  model: string | null;
+  expires_at: string | null;
+  updated_at: string; // naive UTC timestamp
+}
+
 async function handle<T>(res: Response): Promise<T> {
   if (res.status === 401) {
     // Token missing/expired — drop it and bounce back to the login screen.
@@ -269,6 +309,15 @@ async function upload<T>(path: string, form: FormData): Promise<T> {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     }),
   );
+}
+
+/** Query string for TransactionFilters. Encoded, since `q` is free text. */
+function transactionParams(filters: TransactionFilters): URLSearchParams {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== "") params.set(key, String(value));
+  }
+  return params;
 }
 
 export const api = {
@@ -315,8 +364,15 @@ export const api = {
       skipped_details: { institution: string; error_code: string; message: string }[];
     }>("/api/investments/sync", { method: "POST" }),
 
-  transactions: (limit = 50) =>
-    req<Transaction[]>(`/api/finance/transactions?limit=${limit}`),
+  transactions: (limit = 50, offset = 0, filters: TransactionFilters = {}) => {
+    const params = transactionParams(filters);
+    params.set("limit", String(limit));
+    params.set("offset", String(offset));
+    return req<Transaction[]>(`/api/finance/transactions?${params}`);
+  },
+
+  transactionCount: (filters: TransactionFilters = {}) =>
+    req<{ total: number }>(`/api/finance/transactions/count?${transactionParams(filters)}`),
 
   recategorize: (id: number, category: string) =>
     req<Transaction>(`/api/finance/transactions/${id}`, {
@@ -399,7 +455,15 @@ export const api = {
       body: JSON.stringify({ name, type, subtype, current_balance }),
     }),
 
-  updateManualAccount: (id: number, patch: { type?: string; subtype?: string | null }) =>
+  updateManualAccount: (
+    id: number,
+    patch: {
+      type?: string;
+      subtype?: string | null;
+      balance?: number | null; // credit cards / loans: the amount owed
+      balance_as_of?: string; // YYYY-MM-DD, defaults to today server-side
+    },
+  ) =>
     req<Account>(`/api/imports/accounts/${id}`, {
       method: "PATCH",
       body: JSON.stringify(patch),
@@ -425,4 +489,7 @@ export const api = {
   importCoverage: () => req<AccountCoverage[]>("/api/imports/coverage"),
 
   importBatches: () => req<ImportBatch[]>("/api/imports/batches"),
+
+  insights: (page: string) =>
+    req<Insight[]>(`/api/insights?page=${encodeURIComponent(page)}`),
 };

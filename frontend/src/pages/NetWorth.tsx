@@ -8,8 +8,10 @@ function isLiability(a: Account): boolean {
   return /credit|loan/i.test(a.type ?? "");
 }
 
-function AccountList({ accounts }: { accounts: Account[] }) {
-  if (accounts.length === 0) return <EmptyState>None linked.</EmptyState>;
+function AccountList({ accounts, loading }: { accounts: Account[]; loading: boolean }) {
+  if (accounts.length === 0) {
+    return <EmptyState>{loading ? "Loading…" : "None linked."}</EmptyState>;
+  }
   return (
     <div>
       {accounts.map((a) => (
@@ -26,7 +28,7 @@ function AccountList({ accounts }: { accounts: Account[] }) {
 }
 
 export default function NetWorth() {
-  const { netWorth, accounts } = useFinance();
+  const { netWorth, accounts, loading } = useFinance();
   const latest = netWorth.length > 0 ? netWorth[netWorth.length - 1] : null;
   const assets = accounts.filter((a) => !isLiability(a));
   const liabilities = accounts.filter(isLiability);
@@ -54,10 +56,10 @@ export default function NetWorth() {
 
       <div className="grid grid-2">
         <Card title="Assets">
-          <AccountList accounts={assets} />
+          <AccountList accounts={assets} loading={loading} />
         </Card>
         <Card title="Liabilities">
-          <AccountList accounts={liabilities} />
+          <AccountList accounts={liabilities} loading={loading} />
         </Card>
       </div>
     </>

@@ -35,6 +35,9 @@ DEFAULT_CATEGORIES = [
     "Dining", "Shopping", "Groceries", "Transport", "Travel",
     "Bills & Utilities", "Entertainment", "Personal Care", "Health",
     "Loans", "Transfers", "Income", "Fees", "Uncategorized",
+    # A student's two largest costs. Plaid files rent under RENT_AND_UTILITIES and
+    # has no tuition bucket, so these are picked by hand (or by a merchant rule).
+    "Housing", "Education",
 ]
 
 
