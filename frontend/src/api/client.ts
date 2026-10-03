@@ -252,6 +252,22 @@ export interface GoalInput {
   monthly_contribution: number;
 }
 
+/** A reading-material card for a page (see docs/insights.md). */
+export interface Insight {
+  key: string;
+  page: string;
+  kind: string; // "learn" | "news" | "progress"; unknown kinds still render
+  title: string;
+  summary: string | null;
+  body: string; // paragraphs, "- " bullets and **bold** only
+  sources: { title: string; url: string }[];
+  position: number;
+  origin: string; // "seed" | "ai" | "manual"
+  model: string | null;
+  expires_at: string | null;
+  updated_at: string; // naive UTC timestamp
+}
+
 async function handle<T>(res: Response): Promise<T> {
   if (res.status === 401) {
     // Token missing/expired — drop it and bounce back to the login screen.
@@ -473,4 +489,7 @@ export const api = {
   importCoverage: () => req<AccountCoverage[]>("/api/imports/coverage"),
 
   importBatches: () => req<ImportBatch[]>("/api/imports/batches"),
+
+  insights: (page: string) =>
+    req<Insight[]>(`/api/insights?page=${encodeURIComponent(page)}`),
 };

@@ -2,6 +2,7 @@
 from datetime import date, datetime, timezone
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     Date,
     DateTime,
@@ -9,6 +10,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Text,
     UniqueConstraint,
     func,
 )
@@ -278,3 +280,43 @@ class Goal(Base):
     expected_annual_return: Mapped[float] = mapped_column(Float, default=0.06)  # 0.06 = 6%/yr
     monthly_contribution: Mapped[float] = mapped_column(Float, default=0.0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+# Who wrote an insight. Seed cards are owned by the YAML files in
+# app/insights/content/ and are rewritten from them on every boot; anything else
+# (an AI job, a script, a hand edit through the API) is left alone by that sync.
+ORIGIN_SEED = "seed"
+ORIGIN_AI = "ai"
+ORIGIN_MANUAL = "manual"
+
+
+class Insight(Base):
+    """A card of reading material shown on a page — "learn" explainers, "news",
+    or "progress" commentary on the Goals and Budgets pages.
+
+    Content is data rather than JSX so it can change without a frontend change:
+    the shipped cards live in YAML, and anything that generates content later (a
+    scheduled AI job, a DAG running elsewhere) upserts rows by `key` through
+    PUT /api/insights/{key}. See docs/insights.md.
+    """
+
+    __tablename__ = "insights"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # Stable "<page>.<slug>" identity, so a writer can replace its own card
+    # instead of appending a new one each run.
+    key: Mapped[str] = mapped_column(String, unique=True, index=True)
+    page: Mapped[str] = mapped_column(String, index=True)
+    kind: Mapped[str] = mapped_column(String, default="learn")  # learn | news | progress
+    title: Mapped[str] = mapped_column(String)
+    summary: Mapped[str | None] = mapped_column(String, nullable=True)
+    body: Mapped[str] = mapped_column(Text, default="")  # small Markdown subset
+    sources: Mapped[list] = mapped_column(JSON, default=list)  # [{"title", "url"}]
+    position: Mapped[int] = mapped_column(Integer, default=100)
+    origin: Mapped[str] = mapped_column(String, default=ORIGIN_MANUAL)
+    model: Mapped[str | None] = mapped_column(String, nullable=True)  # set when AI-written
+    # News goes stale; an expired card is hidden rather than deleted, so the
+    # writer can see what it published last time.
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow)

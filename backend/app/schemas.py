@@ -1,7 +1,8 @@
 """Pydantic request/response models for the API."""
-from datetime import date
+from datetime import date, datetime
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class LinkTokenResponse(BaseModel):
@@ -343,3 +344,55 @@ class GoalOut(BaseModel):
     gap: float | None = None                      # projected_value - target_amount
     on_track: bool | None = None                  # projected_value >= target_amount
     required_monthly_contribution: float | None = None  # PMT to exactly hit target
+
+
+# --- Insights (learning / news / progress cards; see docs/insights.md) ---
+
+# Lowercase slug, the shape of both a page name and each half of a key.
+SLUG = r"^[a-z0-9]+(?:-[a-z0-9]+)*$"
+
+
+class InsightSource(BaseModel):
+    title: str
+    url: str
+
+
+class InsightContent(BaseModel):
+    """One card's content — the shape of a card in the seed YAML files."""
+
+    kind: str = Field("learn", pattern=SLUG)  # learn | news | progress
+    title: str = Field(min_length=1, max_length=200)
+    summary: str | None = Field(None, max_length=400)
+    body: str = ""
+    sources: list[InsightSource] = []
+    position: int = 100
+    expires_at: datetime | None = None
+
+
+class InsightWrite(InsightContent):
+    """PUT /api/insights/{key} — how a job or pipeline publishes a card.
+
+    `origin` can't be "seed": seed cards are owned by the YAML files and get
+    rewritten from them on boot, so an API-written "seed" card would be clobbered.
+    """
+
+    page: str = Field(pattern=SLUG)
+    origin: Literal["ai", "manual"] = "manual"
+    model: str | None = None  # which model wrote it, when origin == "ai"
+
+
+class InsightOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    key: str
+    page: str
+    kind: str
+    title: str
+    summary: str | None
+    body: str
+    sources: list[InsightSource]
+    position: int
+    origin: str
+    model: str | None
+    expires_at: datetime | None
+    updated_at: datetime

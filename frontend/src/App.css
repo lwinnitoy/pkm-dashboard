@@ -779,6 +779,90 @@
 }
 
 /* ============================================================
+   Insights (learning / news / progress cards)
+   ============================================================ */
+.insight-group + .insight-group {
+  margin-top: 20px;
+}
+/* Two classes deep to beat the generic `.card h3` spacing used on Import. */
+.insight-group .insight-group-title {
+  margin: 0 0 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+.insight-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  /* Expanding one card shouldn't stretch its neighbour into an empty box. */
+  align-items: start;
+}
+@media (max-width: 820px) {
+  .insight-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.insight {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+}
+.insight .insight-title {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+.insight-summary {
+  margin: 4px 0 0;
+  font-size: 0.86rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+.insight-body {
+  margin-top: 10px;
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+.insight-body p,
+.insight-body ul {
+  margin: 0;
+}
+.insight-body * + p,
+.insight-body * + ul {
+  margin-top: 8px;
+}
+.insight-body ul {
+  padding-left: 18px;
+}
+.insight-body li + li {
+  margin-top: 3px;
+}
+.insight-sources {
+  margin-top: 10px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.insight-sources a {
+  color: var(--brand);
+}
+.insight-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+  font-size: 0.78rem;
+}
+.insight-disclaimer {
+  margin: 14px 0 0;
+  font-size: 0.76rem;
+  color: var(--text-subtle);
+}
+
+/* ============================================================
    Investments
    ============================================================ */
 /* Second line under a table figure: where a price came from, a gain's %. */

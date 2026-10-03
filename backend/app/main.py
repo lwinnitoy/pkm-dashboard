@@ -1,4 +1,5 @@
-"""FastAPI entrypoint: create tables, seed categories, register routers."""
+"""FastAPI entrypoint: create tables, seed categories and insights, register routers."""
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -10,10 +11,13 @@ from fastapi.staticfiles import StaticFiles
 from app.auth import require_auth
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
+from app.insights import store as insights_store
 from app.models import Category
 from app.plaid_client import DEFAULT_CATEGORIES
-from app.routers import auth, budgets, finance, imports, investments, plaid
+from app.routers import auth, budgets, finance, imports, insights, investments, plaid
 from app.scheduler import shutdown_scheduler, start_scheduler
+
+logger = logging.getLogger(__name__)
 
 
 def _seed_categories() -> None:
@@ -25,6 +29,23 @@ def _seed_categories() -> None:
         db.commit()
 
 
+def _seed_insights() -> None:
+    """Sync the shipped learning cards from app/insights/content/*.yaml.
+
+    Best-effort: reading material is not worth failing boot over, so a bad edit
+    to a content file is logged and the finance app still starts.
+    (tests/test_insights.py validates the shipped files, which is where a bad
+    edit should be caught.)
+    """
+    try:
+        cards = insights_store.load_seed()
+        with SessionLocal() as db:
+            insights_store.sync_seed(db, cards)
+            db.commit()
+    except Exception:
+        logger.exception("insight seed sync failed; continuing without it")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # SQLite (local dev) bootstraps its schema on boot for zero setup. Postgres
@@ -33,6 +54,7 @@ async def lifespan(app: FastAPI):
     if engine.dialect.name == "sqlite":
         Base.metadata.create_all(bind=engine)
     _seed_categories()
+    _seed_insights()
     start_scheduler()
     try:
         yield
@@ -60,6 +82,7 @@ app.include_router(finance.router, dependencies=_protected)
 app.include_router(budgets.router, dependencies=_protected)
 app.include_router(investments.router, dependencies=_protected)
 app.include_router(imports.router, dependencies=_protected)
+app.include_router(insights.router, dependencies=_protected)
 
 
 @app.get("/health")

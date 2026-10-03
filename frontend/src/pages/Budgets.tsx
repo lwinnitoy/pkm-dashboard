@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type BudgetStatus, type BudgetStatusItem } from "../api/client";
+import InsightsPanel from "../components/InsightsPanel";
 import { Card, EmptyState, MetricTile } from "../components/ui";
 import { CHART } from "../lib/charts";
 import { monthKey } from "../lib/dates";
@@ -177,6 +178,12 @@ export default function Budgets() {
           ))
         )}
       </Card>
+
+      <InsightsPanel
+        page="budgets"
+        title="Learn: budgeting"
+        sub="Common ways to split your income, and a plan for co-op work and study terms"
+      />
     </>
   );
 }
