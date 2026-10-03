@@ -7,7 +7,7 @@ import { cashFlowTotals, netWorthChange, savingsRate } from "../lib/derive";
 import { currency, currencyWhole, percent } from "../lib/format";
 
 export default function Overview() {
-  const { netWorth, trend, summary, transactions, portfolio } = useFinance();
+  const { netWorth, trend, summary, transactions, portfolio, loading } = useFinance();
 
   const nw = netWorthChange(netWorth);
   const { income, spending } = cashFlowTotals(trend);
@@ -42,6 +42,8 @@ export default function Overview() {
               value={currencyWhole(invested)}
               foot={`${portfolio?.holdings_count} holdings`}
             />
+          ) : loading ? (
+            <EmptyState>Loading…</EmptyState>
           ) : (
             <EmptyState>
               No investments linked. <Link to="/accounts">Connect an account</Link>.
@@ -61,7 +63,11 @@ export default function Overview() {
           <MetricTile
             label="Savings rate"
             value={rate == null ? "—" : percent(rate)}
-            foot={`${currency(income - spending)} kept`}
+            foot={
+              income >= spending
+                ? `${currency(income - spending)} kept`
+                : `${currency(spending - income)} more spent than earned`
+            }
           />
         </Card>
       </div>

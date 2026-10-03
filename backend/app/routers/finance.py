@@ -164,18 +164,17 @@ def spending_summary(
 
     rows = (
         db.query(
-            Transaction.category,
+            CATEGORY_LABEL,
             func.sum(Transaction.amount),
             func.count(Transaction.id),
         )
         .filter(*spend_filter)
-        .group_by(Transaction.category)
+        .group_by(CATEGORY_LABEL)
         .order_by(func.sum(Transaction.amount).desc())
         .all()
     )
     by_category = [
-        CategorySpend(category=cat or "Uncategorized", total=round(tot, 2), count=cnt)
-        for cat, tot, cnt in rows
+        CategorySpend(category=cat, total=round(tot, 2), count=cnt) for cat, tot, cnt in rows
     ]
 
     return SummaryResponse(
@@ -314,19 +313,20 @@ def category_comparison(
 
     def totals(start: date, end: date) -> dict[str, float]:
         rows = (
-            db.query(Transaction.category, func.sum(Transaction.amount))
+            db.query(CATEGORY_LABEL, func.sum(Transaction.amount))
             .filter(
                 Transaction.date >= start,
                 Transaction.date < end,
                 Transaction.amount > 0,
                 IS_SPEND_CATEGORY,
             )
-            .group_by(Transaction.category)
+            .group_by(CATEGORY_LABEL)
             .all()
         )
-        return {(cat or "Uncategorized"): float(tot) for cat, tot in rows}
+        return {cat: float(tot) for cat, tot in rows}
 
-    current = totals(cur_start, today)
+    # Through today inclusive, like every other `period` window here.
+    current = totals(cur_start, today + timedelta(days=1))
     previous = totals(prev_start, cur_start)
 
     out: list[CategoryComparison] = []

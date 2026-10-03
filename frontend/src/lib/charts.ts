@@ -6,6 +6,7 @@ export const CHART = {
   positive: "#0e9f6e", // emerald — income / gains
   negative: "#e02424", // red — spending / losses
   neutral: "#64748b", // slate — secondary
+  savings: "#155e75", // deep cyan — money kept; outside CATEGORY_COLORS so it can't match a category
   grid: "#eef0f4",
   axis: "#9aa1ac",
 } as const;

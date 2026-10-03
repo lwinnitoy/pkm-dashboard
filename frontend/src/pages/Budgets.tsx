@@ -2,16 +2,18 @@ import { useCallback, useEffect, useState } from "react";
 import { api, type BudgetStatus, type BudgetStatusItem } from "../api/client";
 import { Card, EmptyState, MetricTile } from "../components/ui";
 import { CHART } from "../lib/charts";
+import { monthKey } from "../lib/dates";
 import { currency } from "../lib/format";
 
+// The local calendar month. toISOString() is UTC, which on the evening of a
+// month's last day (anywhere in the Americas) is already the next month.
 function currentMonth(): string {
-  return new Date().toISOString().slice(0, 7);
+  return monthKey();
 }
 
 function shiftMonth(month: string, delta: number): string {
   const [y, m] = month.split("-").map(Number);
-  const d = new Date(y, m - 1 + delta, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  return monthKey(new Date(y, m - 1 + delta, 1));
 }
 
 function monthLabel(month: string): string {
@@ -150,7 +152,11 @@ export default function Budgets() {
 
       <Card title="Budgets" sub="Monthly limits per category">
         {budgeted.length === 0 ? (
-          <EmptyState>No budgets yet. Set one on a category below.</EmptyState>
+          <EmptyState>
+            {unbudgeted.length > 0
+              ? "No budgets yet. Set one on a category below."
+              : "No budgets yet. Categories you spend in will appear below, ready for a limit."}
+          </EmptyState>
         ) : (
           budgeted.map((i) => (
             <BudgetRow key={i.category} item={i} onSave={save} onRemove={remove} />
@@ -160,7 +166,11 @@ export default function Budgets() {
 
       <Card title="Not budgeted" sub="Categories with spending this month">
         {unbudgeted.length === 0 ? (
-          <EmptyState>Every category with spending has a budget. 🎯</EmptyState>
+          <EmptyState>
+            {totalSpent > 0
+              ? "Every category with spending has a budget. 🎯"
+              : "No spending recorded for this month yet."}
+          </EmptyState>
         ) : (
           unbudgeted.map((i) => (
             <BudgetRow key={i.category} item={i} onSave={save} onRemove={remove} />

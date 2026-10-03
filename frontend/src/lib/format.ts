@@ -1,5 +1,6 @@
 // Shared formatting helpers so currency/percent/date rendering is consistent
 // across every page.
+import { parseDate } from "./dates";
 
 const currencyFmt = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -45,14 +46,14 @@ export function percent(n: number | null | undefined, signed = false): string {
 
 /** Aug 31 */
 export function shortDate(iso: string): string {
-  const d = new Date(iso);
+  const d = parseDate(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 /** Aug 31, 2026 */
 export function longDate(iso: string): string {
-  const d = new Date(iso);
+  const d = parseDate(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }

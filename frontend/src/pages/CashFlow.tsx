@@ -8,7 +8,7 @@ import { cashFlowTotals, savingsRate } from "../lib/derive";
 import { currency, percent } from "../lib/format";
 
 export default function CashFlow() {
-  const { trend, summary, merchants, comparison } = useFinance();
+  const { trend, trendGranularity, summary, merchants, comparison } = useFinance();
   const { income, spending } = cashFlowTotals(trend);
   const rate = savingsRate(income, spending);
   const categories = summary?.by_category ?? [];
@@ -35,16 +35,13 @@ export default function CashFlow() {
         <CashFlowSankey income={income} categories={categories} />
       </Card>
 
-      <div className="grid grid-2">
-        <Card title="Income vs spending over time">
-          <SpendingTrendChart data={trend} />
-        </Card>
-        <Card title="Top merchants">
-          <TopMerchants data={merchants} />
-        </Card>
-      </div>
+      {/* Full width, not paired: a taller neighbour (like the merchant list)
+          stretches the row and strands this 260px chart in empty space. */}
+      <Card title="Income vs spending over time">
+        <SpendingTrendChart data={trend} granularity={trendGranularity} />
+      </Card>
 
-      <div className="grid grid-2">
+      <div className="grid grid-2-1">
         <Card title="Spending by category">
           <CategoryBreakdown data={categories} />
         </Card>
@@ -65,6 +62,10 @@ export default function CashFlow() {
           )}
         </Card>
       </div>
+
+      <Card title="Top merchants">
+        <TopMerchants data={merchants} />
+      </Card>
     </>
   );
 }

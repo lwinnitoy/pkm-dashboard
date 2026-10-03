@@ -40,6 +40,8 @@ export interface FinanceContextValue {
   transactions: Transaction[];
   accounts: Account[];
   trend: TrendPoint[];
+  /** Bucket size `trend` was fetched with; lags `range` until the refetch lands. */
+  trendGranularity: "day" | "week" | "month";
   merchants: MerchantSpend[];
   comparison: CategoryComparison[];
   netWorth: NetWorthPoint[];
