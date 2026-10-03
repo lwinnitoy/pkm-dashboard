@@ -18,6 +18,14 @@ export interface Transaction {
   pending: boolean;
 }
 
+/** Filters shared by the transaction list and its count; omitted = unfiltered. */
+export interface TransactionFilters {
+  period?: number; // look-back in days; omitted = all time
+  q?: string; // case-insensitive match on description or merchant
+  category?: string; // "Uncategorized" also matches rows with no category
+  account_id?: number;
+}
+
 export interface CategorySpend {
   category: string;
   total: number;
@@ -271,6 +279,15 @@ async function upload<T>(path: string, form: FormData): Promise<T> {
   );
 }
 
+/** Query string for TransactionFilters. Encoded, since `q` is free text. */
+function transactionParams(filters: TransactionFilters): URLSearchParams {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== "") params.set(key, String(value));
+  }
+  return params;
+}
+
 export const api = {
   authStatus: () => req<{ auth_required: boolean }>("/api/auth/status"),
 
@@ -315,8 +332,15 @@ export const api = {
       skipped_details: { institution: string; error_code: string; message: string }[];
     }>("/api/investments/sync", { method: "POST" }),
 
-  transactions: (limit = 50) =>
-    req<Transaction[]>(`/api/finance/transactions?limit=${limit}`),
+  transactions: (limit = 50, offset = 0, filters: TransactionFilters = {}) => {
+    const params = transactionParams(filters);
+    params.set("limit", String(limit));
+    params.set("offset", String(offset));
+    return req<Transaction[]>(`/api/finance/transactions?${params}`);
+  },
+
+  transactionCount: (filters: TransactionFilters = {}) =>
+    req<{ total: number }>(`/api/finance/transactions/count?${transactionParams(filters)}`),
 
   recategorize: (id: number, category: string) =>
     req<Transaction>(`/api/finance/transactions/${id}`, {

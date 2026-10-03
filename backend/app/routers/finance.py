@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, or_
+from sqlalchemy import ColumnElement, func, or_
 from sqlalchemy.orm import Session
 
 from app.categorization import match_key, upsert_rule_and_apply
@@ -28,6 +28,7 @@ from app.schemas import (
     MerchantSpend,
     NetWorthPoint,
     SummaryResponse,
+    TransactionCount,
     TransactionOut,
     TransactionUpdate,
     TrendPoint,
@@ -49,18 +50,71 @@ IS_SPEND_CATEGORY = or_(
     Transaction.category.notin_(NON_SPEND_CATEGORIES),
 )
 
+# Group by this, not the raw column: NULL and the literal "Uncategorized" (which
+# sync and imports write) are the same bucket. Grouped separately they produce two
+# "Uncategorized" entries, and a dict keyed by name keeps only one of them.
+CATEGORY_LABEL = func.coalesce(Transaction.category, "Uncategorized")
+
+
+def _transaction_filters(
+    period: int | None = Query(
+        None, ge=1, le=1095, description="Look-back window in days; omit for all time"
+    ),
+    q: str | None = Query(None, description="Case-insensitive match on name or merchant"),
+    category: str | None = None,
+    account_id: int | None = None,
+) -> list[ColumnElement[bool]]:
+    """WHERE clauses shared by the transaction list and its count, so "Showing N
+    of M" always counts exactly the rows being paged through."""
+    clauses: list[ColumnElement[bool]] = []
+    if period is not None:
+        clauses.append(Transaction.date >= date.today() - timedelta(days=period))
+    if q and q.strip():
+        # autoescape: searching "50%" means the text, not a LIKE wildcard.
+        needle = q.strip()
+        clauses.append(
+            or_(
+                Transaction.name.icontains(needle, autoescape=True),
+                Transaction.merchant_name.icontains(needle, autoescape=True),
+            )
+        )
+    if category == "Uncategorized":
+        # Sync and imports write the literal, but the column is nullable and NULL
+        # rows are shown as "Uncategorized" everywhere, so match both.
+        clauses.append(or_(Transaction.category.is_(None), Transaction.category == category))
+    elif category:
+        clauses.append(Transaction.category == category)
+    if account_id is not None:
+        clauses.append(Transaction.account_id == account_id)
+    return clauses
+
 
 @router.get("/transactions", response_model=list[TransactionOut])
 def list_transactions(
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
-    category: str | None = None,
+    filters: list[ColumnElement[bool]] = Depends(_transaction_filters),
     db: Session = Depends(get_db),
 ):
-    query = db.query(Transaction).order_by(Transaction.date.desc(), Transaction.id.desc())
-    if category:
-        query = query.filter(Transaction.category == category)
-    return query.offset(offset).limit(limit).all()
+    return (
+        db.query(Transaction)
+        .filter(*filters)
+        .order_by(Transaction.date.desc(), Transaction.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+
+# Declared ahead of /transactions/{txn_id} so "count" is never taken for an id.
+@router.get("/transactions/count", response_model=TransactionCount)
+def count_transactions(
+    filters: list[ColumnElement[bool]] = Depends(_transaction_filters),
+    db: Session = Depends(get_db),
+):
+    """How many transactions match the list's filters, ignoring limit/offset."""
+    total = db.query(func.count(Transaction.id)).filter(*filters).scalar()
+    return TransactionCount(total=total)
 
 
 @router.patch("/transactions/{txn_id}", response_model=TransactionOut)

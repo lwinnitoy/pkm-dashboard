@@ -36,6 +36,7 @@ export interface FinanceContextValue {
   setRange: (days: number) => void;
 
   summary: Summary | null;
+  /** Only the few most recent (Overview card); the Transactions page fetches its own. */
   transactions: Transaction[];
   accounts: Account[];
   trend: TrendPoint[];
@@ -48,7 +49,6 @@ export interface FinanceContextValue {
 
   refresh: () => Promise<void>;
   sync: () => Promise<void>;
-  recategorize: (id: number, category: string) => Promise<void>;
   createGoal: (g: GoalInput) => Promise<void>;
   deleteGoal: (id: number) => Promise<void>;
 }

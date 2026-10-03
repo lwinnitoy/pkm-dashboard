@@ -42,7 +42,9 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     try {
       const [s, t, a, tr, m, c, nw, g, cats] = await Promise.all([
         api.summary(range),
-        api.transactions(100),
+        // Just enough for the Overview's "Recent transactions" card; the
+        // Transactions page pages through full history on its own.
+        api.transactions(6),
         api.accounts(),
         api.spendingTrend(range, granularityFor(range)),
         api.topMerchants(range, 10),
@@ -103,14 +105,6 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     }
   }, [refresh]);
 
-  const recategorize = useCallback(
-    async (id: number, category: string) => {
-      await api.recategorize(id, category);
-      await refresh(); // a merchant rule can reassign several transactions
-    },
-    [refresh],
-  );
-
   const createGoal = useCallback(
     async (g: GoalInput) => {
       await api.createGoal(g);
@@ -148,7 +142,6 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         categories,
         refresh,
         sync,
-        recategorize,
         createGoal,
         deleteGoal,
       }}

@@ -56,6 +56,10 @@ class TransactionUpdate(BaseModel):
     category: str
 
 
+class TransactionCount(BaseModel):
+    total: int  # rows matching the list's filters, ignoring limit/offset
+
+
 class CategorySpend(BaseModel):
     category: str
     total: float

@@ -547,6 +547,55 @@
   border-color: var(--border-strong);
 }
 
+/* Transactions page: filter bar, paging */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.filter-bar input,
+.filter-bar select {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 7px 9px;
+  font-size: 0.88rem;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--surface);
+}
+.filter-bar input {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.filter-bar select {
+  max-width: 220px;
+}
+.filter-count {
+  margin-left: auto;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.txn-results.is-loading {
+  opacity: 0.55;
+  transition: opacity 0.15s;
+}
+.load-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 14px;
+}
+.loading-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
+
 /* ============================================================
    Budgets
    ============================================================ */
