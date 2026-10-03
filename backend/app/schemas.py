@@ -37,6 +37,9 @@ class AccountOut(BaseModel):
     # Which linked login this belongs to — the way to tell two identically-named
     # accounts apart when an institution has been linked more than once.
     institution_name: str | None = None
+    # Manual accounts: the date the owner's entered balance was true as of (later
+    # imports roll it forward). None for Plaid accounts.
+    balance_anchor_date: date | None = None
 
 
 class TransactionOut(BaseModel):
@@ -262,7 +265,10 @@ class ManualAccountUpdate(BaseModel):
     name: str | None = None
     type: str | None = None
     subtype: str | None = None
-    current_balance: float | None = None
+    # The balance shown in the bank's app on `balance_as_of` (default today); null
+    # clears it. Credit cards and loans: the amount owed, as a positive number.
+    balance: float | None = None
+    balance_as_of: date | None = None
 
 
 class ImportBatchOut(BaseModel):

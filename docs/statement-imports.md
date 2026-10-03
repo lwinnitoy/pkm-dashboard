@@ -33,10 +33,28 @@ A CSV account has no Plaid identity, so `accounts.plaid_item_id` and
 `POST /api/imports/accounts` creates one. Transactions carry the same `source`,
 plus `import_fingerprint` and `import_batch_id`.
 
-Balance is not derivable from a statement export, so a manual account's
-`current_balance` is whatever you set at creation. The daily snapshot job carries
-that value forward (it only refreshes *Plaid* balances), so net worth treats a
-manual account as flat until you update it.
+A statement export has no balance column (RBC's doesn't), so a manual account
+gets its balance from you. On the Accounts page, **Set balance** records the
+balance your bank shows as of a date (the *anchor*: `balance_anchor` +
+`balance_anchor_date`; `PATCH /api/imports/accounts/{id}` with `balance` and
+`balance_as_of`). For a credit card or loan, enter the amount owed as a positive
+number. From then on `current_balance` is derived (`app/imports/balance.py`):
+
+- the anchor, plus every transaction in that account dated **after** the anchor
+  date. Plaid's sign applies: a purchase lowers a chequing balance but raises what
+  a card owes.
+- Rows dated on or before the anchor are already part of the number you typed. So
+  back-filling an older statement leaves the balance alone, while importing a
+  newer one moves it.
+- It's recomputed on every import commit and when the account's `type` changes,
+  since that flips asset vs. debt. Each recompute also rewrites **today's** balance
+  snapshot for that account, so net worth reflects it immediately. Earlier
+  snapshots are never rewritten.
+
+Storing the derived value in `current_balance` means the accounts list, the daily
+snapshot job and net worth treat manual and Plaid accounts identically. Between
+imports the balance stays flat; re-anchor whenever it drifts (fees or interest
+missing from an export, say).
 
 ## Account type decides asset vs. debt
 

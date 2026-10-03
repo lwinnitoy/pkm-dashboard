@@ -448,6 +448,32 @@
   color: var(--text-muted);
   text-transform: capitalize;
 }
+.account-note {
+  margin-top: 2px;
+  font-size: 0.74rem;
+  color: var(--text-subtle);
+}
+.balance-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.balance-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+.balance-form input {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  font-size: 0.86rem;
+  width: 140px;
+}
 .chip {
   background: var(--surface-muted);
   border-radius: var(--radius-pill);

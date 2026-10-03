@@ -69,6 +69,12 @@ class Account(Base):
     subtype: Mapped[str | None] = mapped_column(String, nullable=True)
     current_balance: Mapped[float | None] = mapped_column(Float, nullable=True)
     currency: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Manual accounts only. A statement export carries no balance, so the owner
+    # enters one (read off the bank's app) as of a date; current_balance is then
+    # derived as that anchor plus every imported transaction dated after it. See
+    # app/imports/balance.py.
+    balance_anchor: Mapped[float | None] = mapped_column(Float, nullable=True)
+    balance_anchor_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     item: Mapped["PlaidItem"] = relationship(back_populates="accounts")
     transactions: Mapped[list["Transaction"]] = relationship(

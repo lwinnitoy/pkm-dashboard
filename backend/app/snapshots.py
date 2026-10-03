@@ -26,22 +26,25 @@ def refresh_balances(db: Session) -> None:
                 row.current_balance = acct.balances.current
 
 
+def write_snapshot(db: Session, account: Account, on: date | None = None) -> None:
+    """Upsert `account`'s snapshot for `on` (default today) from its current balance.
+
+    Only ever touches that one (account, day) row: earlier snapshots are history
+    Plaid can't give back, so nothing here rewrites them.
+    """
+    on = on or date.today()
+    existing = db.query(BalanceSnapshot).filter_by(account_id=account.id, date=on).first()
+    if existing is None:
+        db.add(BalanceSnapshot(account_id=account.id, date=on, balance=account.current_balance))
+    else:
+        existing.balance = account.current_balance  # keep the latest value for the day
+
+
 def write_snapshots(db: Session, on: date | None = None) -> int:
     """Upsert one snapshot per account for `on` (default today). Returns rows written."""
-    on = on or date.today()
     written = 0
     for account in db.query(Account).all():
-        existing = (
-            db.query(BalanceSnapshot)
-            .filter_by(account_id=account.id, date=on)
-            .first()
-        )
-        if existing is None:
-            db.add(
-                BalanceSnapshot(account_id=account.id, date=on, balance=account.current_balance)
-            )
-        else:
-            existing.balance = account.current_balance  # keep the latest value for the day
+        write_snapshot(db, account, on)
         written += 1
     return written
 

@@ -50,6 +50,9 @@ export interface Account {
   source: string;
   mask: string | null;
   institution_name: string | null;
+  // Manual accounts: the date the entered balance was true on; imports after it
+  // roll the balance forward. Null for Plaid accounts.
+  balance_anchor_date: string | null;
 }
 
 export interface TrendPoint {
@@ -423,7 +426,15 @@ export const api = {
       body: JSON.stringify({ name, type, subtype, current_balance }),
     }),
 
-  updateManualAccount: (id: number, patch: { type?: string; subtype?: string | null }) =>
+  updateManualAccount: (
+    id: number,
+    patch: {
+      type?: string;
+      subtype?: string | null;
+      balance?: number | null; // credit cards / loans: the amount owed
+      balance_as_of?: string; // YYYY-MM-DD, defaults to today server-side
+    },
+  ) =>
     req<Account>(`/api/imports/accounts/${id}`, {
       method: "PATCH",
       body: JSON.stringify(patch),

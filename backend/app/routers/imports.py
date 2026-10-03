@@ -3,11 +3,14 @@
 Preview and commit both take the file, so nothing is staged server-side between
 the two calls — fingerprints are deterministic, so the preview's counts hold.
 """
+from datetime import date
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.imports import parsers, reconcile
+from app.imports import balance
 from app.imports.categorize import TRANSFERS, resolve_category
 from app.imports.parsers import PRESETS, ParseError
 from app.models import SOURCE_CSV, Account, ImportBatch, Transaction
@@ -37,16 +40,19 @@ def list_presets():
 
 @router.post("/accounts", response_model=AccountOut, status_code=201)
 def create_manual_account(payload: ManualAccountCreate, db: Session = Depends(get_db)):
-    """An account with no Plaid identity, to import statements into."""
+    """An account with no Plaid identity, to import statements into. An opening
+    balance is taken as today's, so imports dated after today roll it forward."""
     account = Account(
         source=SOURCE_CSV,
         name=payload.name,
         type=payload.type,
         subtype=payload.subtype,
         currency=payload.currency,
-        current_balance=payload.current_balance,
     )
     db.add(account)
+    db.flush()
+    if payload.current_balance is not None:
+        balance.set_anchor(db, account, payload.current_balance, date.today())
     db.commit()
     db.refresh(account)
     return account
@@ -56,8 +62,8 @@ def create_manual_account(payload: ManualAccountCreate, db: Session = Depends(ge
 def update_manual_account(
     account_id: int, payload: ManualAccountUpdate, db: Session = Depends(get_db)
 ):
-    """Correct a manual account — most often its `type`, since that decides
-    whether net worth treats the balance as an asset or a debt. Plaid-linked
+    """Correct a manual account — its `type` (which decides whether net worth
+    treats the balance as an asset or a debt) or its balance. Plaid-linked
     accounts are not editable here: their next sync would overwrite it anyway."""
     account = db.query(Account).filter_by(id=account_id).first()
     if account is None:
@@ -67,8 +73,20 @@ def update_manual_account(
             status_code=400, detail="Only manually-created accounts can be edited"
         )
 
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    fields = payload.model_dump(exclude_unset=True)
+    setting_balance = "balance" in fields
+    amount = fields.pop("balance", None)
+    as_of = fields.pop("balance_as_of", None)
+    if as_of is not None and amount is None:
+        raise HTTPException(status_code=422, detail="balance_as_of needs a balance")
+
+    for field, value in fields.items():
         setattr(account, field, value)
+    if setting_balance:
+        balance.set_anchor(db, account, amount, as_of or date.today())
+    else:
+        # A type change flips the sign transactions apply with (asset vs. debt).
+        balance.refresh(db, account)
     db.commit()
     db.refresh(account)
     return account
@@ -190,6 +208,8 @@ def commit_import(
             )
         )
     batch.rows_imported = len(to_write)
+    db.flush()  # the balance query has to see the rows just added
+    balance.refresh(db, account)
     db.commit()
 
     return ImportCommitOut(
