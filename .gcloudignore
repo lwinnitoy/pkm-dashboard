@@ -1,0 +1,7 @@
+# What `gcloud builds submit` uploads to Cloud Build: the same exclusions as git
+# and docker, so .env files, local databases and bank exports never leave the
+# machine.
+.gcloudignore
+.git
+#!include:.gitignore
+#!include:.dockerignore

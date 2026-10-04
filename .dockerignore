@@ -12,3 +12,7 @@ frontend/.vite
 **/.env
 .claude
 docs
+# Never ship local tooling output or real bank exports into an image.
+.playwright-mcp
+statements
+**/download-transactions*.csv

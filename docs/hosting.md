@@ -1,5 +1,11 @@
 # Hosting
 
+> **Current target: Google Cloud Run + Neon**, with Google sign-in (IAP) in front
+> and a daily Cloud Run Job for sync and backups. Step-by-step:
+> [deploy-cloud-run.md](deploy-cloud-run.md). Why this shape:
+> [hosting-options.md](hosting-options.md). The Replit and Docker Compose notes
+> below still work.
+
 The app ships as two images — a FastAPI backend (migrated on start) and an
 nginx-served frontend that reverse-proxies `/api` to the backend — plus Postgres.
 [docker-compose.yml](../docker-compose.yml) wires them together for a local
