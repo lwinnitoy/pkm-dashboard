@@ -22,6 +22,7 @@ from app.database import get_db
 from app.investments.valuation import HoldingValuation, value_portfolio
 from app.models import Account, Holding, InvestmentTransaction, PlaidItem, Security
 from app.plaid_client import get_plaid_client
+from app.snapshots import apply_balances, write_snapshot
 from app.schemas import (
     AccountValue,
     AllocationSlice,
@@ -77,6 +78,11 @@ def sync_investments_for_item(db: Session, client, item: PlaidItem) -> dict[str,
     holdings_resp = client.investments_holdings_get(
         InvestmentsHoldingsGetRequest(access_token=item.access_token)
     )
+    # The response carries the accounts' latest balances; an investment account's
+    # value *is* its balance (see valuation.py), so keep it and today's snapshot
+    # current here rather than only when the item is re-linked.
+    for account in apply_balances(db, getattr(holdings_resp, "accounts", None)):
+        write_snapshot(db, account)
     sec_map = _upsert_securities(db, holdings_resp.securities)
     counts["securities"] = len(sec_map)
     acct_map = _account_map(db, item)

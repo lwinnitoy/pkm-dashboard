@@ -17,7 +17,7 @@ from app.database import get_db
 from app.models import Account, PlaidItem, Transaction
 from app.plaid_client import get_plaid_client, normalize_category
 from app.schemas import ExchangeTokenRequest, LinkTokenResponse, SyncResponse
-from app.snapshots import write_snapshots
+from app.snapshots import apply_balances, write_snapshots
 
 router = APIRouter(prefix="/api/plaid", tags=["plaid"])
 
@@ -169,6 +169,7 @@ def sync_all_items(db: Session) -> dict[str, int]:
             except Exception as exc:
                 raise HTTPException(status_code=502, detail=f"Plaid error: {exc}") from exc
 
+            apply_balances(db, getattr(resp, "accounts", None))
             for txn in resp.added:
                 _upsert_transaction(db, txn)
                 totals["added"] += 1
@@ -187,7 +188,8 @@ def sync_all_items(db: Session) -> dict[str, int]:
         item.transactions_cursor = cursor
         db.commit()
 
-    # Capture today's balances so net-worth history accrues on every sync.
+    # Capture today's balances (refreshed above) so net-worth history accrues on
+    # every sync.
     write_snapshots(db)
     db.commit()
 

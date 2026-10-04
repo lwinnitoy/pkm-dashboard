@@ -106,3 +106,37 @@ def test_a_malformed_error_body_still_yields_a_reason(client, db_session, fake_i
 
     assert skipped["error_code"] == "UNKNOWN"
     assert skipped["message"]
+
+
+def test_holdings_sync_refreshes_the_account_balance_and_todays_snapshot(
+    client, db_session, monkeypatch
+):
+    """The holdings response carries the account's balance, which is the
+    portfolio value; keep it current without waiting for a re-link."""
+    from datetime import date
+
+    from app.models import Account, BalanceSnapshot
+
+    item = make_item(db_session, item_id="ws-1", name="Wealthsimple")
+    tfsa = make_account(
+        db_session, item=item, plaid_account_id="tfsa-1", name="TFSA",
+        type="investment", current_balance=20000.0,
+    )
+    db_session.commit()
+
+    class Client(FakeInvestmentsClient):
+        def investments_holdings_get(self, request):
+            return SimpleNamespace(
+                securities=[],
+                holdings=[],
+                accounts=[SimpleNamespace(account_id="tfsa-1", balances=SimpleNamespace(current=21500.25))],
+            )
+
+    monkeypatch.setattr(investments_router, "get_plaid_client", lambda: Client({}))
+
+    assert client.post("/api/investments/sync").status_code == 200
+
+    db_session.expire_all()
+    assert db_session.get(Account, tfsa.id).current_balance == 21500.25
+    snap = db_session.query(BalanceSnapshot).filter_by(account_id=tfsa.id, date=date.today()).one()
+    assert snap.balance == 21500.25
