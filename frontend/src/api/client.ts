@@ -93,6 +93,17 @@ export interface AllocationSlice {
   amount: number; // measured in PortfolioSummary.allocation_basis
 }
 
+/** Inputs for the Goals page's "current direction" projection. */
+export interface InvestmentDirection {
+  total_value: number | null; // null = no investments linked
+  unrealized_gain_pct: number | null; // total gain over cost basis — not per year
+  account_names: string[];
+  monthly_contribution: number | null; // null until there's ~2 months of history
+  contributions_net: number;
+  contribution_count: number;
+  history_days: number;
+}
+
 export interface PortfolioSummary {
   // total_value can be null per the app contract ("no investments linked").
   total_value: number | null;
@@ -414,6 +425,8 @@ export const api = {
 
   netWorth: (period = 180) =>
     req<NetWorthPoint[]>(`/api/finance/net-worth?period=${period}`),
+
+  investmentDirection: () => req<InvestmentDirection>("/api/investments/direction"),
 
   investmentsPortfolio: () =>
     req<PortfolioSummary>("/api/investments/portfolio"),

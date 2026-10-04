@@ -19,6 +19,7 @@ from plaid.model.investments_transactions_get_request_options import (
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.investments.contributions import contribution_rate
 from app.investments.valuation import HoldingValuation, value_portfolio
 from app.models import Account, Holding, InvestmentTransaction, PlaidItem, Security
 from app.plaid_client import get_plaid_client
@@ -27,6 +28,7 @@ from app.schemas import (
     AccountValue,
     AllocationSlice,
     HoldingOut,
+    InvestmentDirection,
     InvestmentsSyncResponse,
     InvestmentTransactionOut,
     PortfolioSummary,
@@ -335,4 +337,22 @@ def portfolio_summary(db: Session = Depends(get_db)):
             )
             for sec, amount in valuation.allocation()
         ],
+    )
+
+
+@router.get("/direction", response_model=InvestmentDirection)
+def investment_direction(db: Session = Depends(get_db)):
+    """Where the investment accounts stand and how fast money goes in — the
+    inputs to the Goals page's "current direction" projection."""
+    valuation = value_portfolio(db)
+    rate = contribution_rate(db, [a.account.id for a in valuation.accounts])
+    total = valuation.total_value
+    return InvestmentDirection(
+        total_value=_rounded(total),
+        unrealized_gain_pct=_rounded(valuation.unrealized_gain_pct),
+        account_names=[a.account.name or "Account" for a in valuation.accounts],
+        monthly_contribution=rate.monthly,
+        contributions_net=rate.net_total,
+        contribution_count=rate.count,
+        history_days=rate.history_days,
     )

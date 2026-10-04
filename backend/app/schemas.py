@@ -176,6 +176,18 @@ class AllocationSlice(BaseModel):
     amount: float  # measured in PortfolioSummary.allocation_basis
 
 
+class InvestmentDirection(BaseModel):
+    """Inputs for the Goals page's "current direction" projection."""
+
+    total_value: float | None  # same as /portfolio; None = nothing linked
+    unrealized_gain_pct: float | None  # total gain over cost basis, *not* per year
+    account_names: list[str]
+    monthly_contribution: float | None  # None until there's enough history
+    contributions_net: float
+    contribution_count: int
+    history_days: int
+
+
 class PortfolioSummary(BaseModel):
     # Same number the investments seam returns; None = nothing linked.
     total_value: float | None

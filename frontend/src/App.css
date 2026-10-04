@@ -749,6 +749,17 @@
   gap: 28px;
   margin-bottom: 14px;
 }
+.direction-inputs {
+  margin-bottom: 4px;
+}
+.direction-inputs input {
+  width: 130px;
+}
+.direction-note {
+  margin: 6px 0 14px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
 .badge-ok {
   color: var(--positive);
   font-weight: 700;
