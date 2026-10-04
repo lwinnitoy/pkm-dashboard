@@ -11,6 +11,25 @@ from app.models import Account, BalanceSnapshot, PlaidItem
 from app.plaid_client import get_plaid_client
 
 
+def apply_balances(db: Session, plaid_accounts) -> list[Account]:
+    """Copy `balances.current` from Plaid account objects onto our rows; returns
+    the rows updated.
+
+    /accounts/get, /transactions/sync and /investments/holdings/get all return
+    the item's accounts with Plaid's latest balances, so every sync path can keep
+    balances current at no extra API cost. (Before this, only linking and the
+    daily job updated them, so "Sync now" left an investment account's value —
+    which is its balance — frozen until the next re-link.)
+    """
+    updated = []
+    for acct in plaid_accounts or []:
+        row = db.query(Account).filter_by(plaid_account_id=acct.account_id).first()
+        if row is not None and acct.balances is not None:
+            row.current_balance = acct.balances.current
+            updated.append(row)
+    return updated
+
+
 def refresh_balances(db: Session) -> None:
     """Pull fresh current balances from Plaid for every linked account."""
     client = get_plaid_client()
@@ -20,10 +39,7 @@ def refresh_balances(db: Session) -> None:
         except Exception:
             # A single failing item shouldn't abort the whole snapshot run.
             continue
-        for acct in resp.accounts:
-            row = db.query(Account).filter_by(plaid_account_id=acct.account_id).first()
-            if row is not None and acct.balances is not None:
-                row.current_balance = acct.balances.current
+        apply_balances(db, resp.accounts)
 
 
 def write_snapshot(db: Session, account: Account, on: date | None = None) -> None:

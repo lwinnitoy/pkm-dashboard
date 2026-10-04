@@ -72,6 +72,39 @@ That second option fits the Databricks direction below.
   your own money still need care. One option: compute every figure in code and have
   the model only phrase it.
 
+## Calendar, workout and sleep analytics
+
+**Idea.** Bring in calendar, workout and sleep data, mainly to analyze it
+alongside the finance data: training load against sleep, busy calendar weeks
+against spending, sleep trends across co-op and study terms. This is an
+analytics project more than an app feature.
+
+**Why it fits.** This data is append-only time series pulled from outside APIs,
+with almost no app writes (nothing is recategorized or budgeted). So unlike
+finance, it doesn't need to go through Postgres. Land it straight in Databricks:
+- One ingestion job per source writes raw records to bronze Delta tables.
+- Silver tables clean them into daily facts.
+- Gold tables join them with finance data copied from Postgres (see the
+  migration plan below).
+
+The app only needs the gold results. It can read them through Databricks SQL, or
+from tables synced back into Postgres. Lakebase can sync Delta tables into
+Postgres; check whether that works with an external Neon database.
+
+**Open questions before building:**
+- **Sources and access.** Google Calendar has an OAuth API. Apple Health has no
+  cloud API, so it needs a phone export or a sync app. Garmin, Fitbit, Oura, Whoop
+  and Strava each have their own API, with their own approval and rate limits.
+  Pick the one or two devices actually in use before designing anything.
+- **Where ingestion runs.** Databricks Free Edition only allows outbound internet
+  to an unpublished list of trusted sites (see
+  [hosting-options.md](hosting-options.md)). If these APIs aren't on it, fetch
+  with the Cloud Run job and land files in a Unity Catalog volume for Databricks
+  to pick up. That's the same pattern as the Plaid sync.
+- **Sensitivity.** Health data is more sensitive than transactions. Decide what is
+  stored raw versus only as daily aggregates. Keep OAuth tokens encrypted the way
+  Plaid's are (`EncryptedString`).
+
 ## Databricks migration
 
 **Intent.** Eventually move the data layer to Databricks. Two drivers: data

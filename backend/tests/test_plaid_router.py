@@ -180,3 +180,29 @@ def test_sync_paginates_when_has_more(client, fake_client, db_session):
     assert resp.json()["added"] == 2
     assert db_session.query(Transaction).count() == 2
     assert db_session.query(PlaidItem).one().transactions_cursor == "c2"
+
+
+# --------------------------------------------------------------------------- #
+# balances on sync                                                             #
+# --------------------------------------------------------------------------- #
+
+
+def test_sync_refreshes_balances_from_the_sync_response(client, fake_client, db_session):
+    """"Sync now" used to leave balances as of the last link — an investment
+    account's value (its balance) stayed frozen until a re-link."""
+    from app.models import BalanceSnapshot
+    from tests.factories import make_account, make_item
+
+    item = make_item(db_session, item_id="item-abc")
+    acct = make_account(db_session, item=item, plaid_account_id="acct-1", current_balance=100.0)
+    db_session.commit()
+    page = _sync_page(next_cursor="c1")
+    page.accounts = [_account("acct-1", balance=321.0)]
+    fake_client.sync_pages = {None: page}
+
+    assert client.post("/api/plaid/sync").status_code == 200
+
+    db_session.expire_all()
+    assert db_session.get(Account, acct.id).current_balance == 321.0
+    snap = db_session.query(BalanceSnapshot).filter_by(account_id=acct.id, date=date.today()).one()
+    assert snap.balance == 321.0

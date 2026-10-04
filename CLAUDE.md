@@ -150,9 +150,11 @@ Single-user auth (`app/auth.py`): when `APP_PASSWORD` is set, `/api/auth/login` 
 (local dev). New routers should be registered the same protected way. Only `/api/auth/*`
 and `/health` stay open.
 
-For single-port deploys (Replit), FastAPI also serves `frontend/dist` with an SPA
+For single-port deploys (Cloud Run via the root `Dockerfile`, or Replit), FastAPI also serves `frontend/dist` with an SPA
 fallback, registered *after* the API routers so `/api/*` takes precedence. The Docker
-image runs `alembic upgrade head` before starting uvicorn. Hosting details are in
+image runs `alembic upgrade head` before starting uvicorn. Hosting is moving to Cloud Run + Neon behind Google sign-in, with a daily
+Cloud Run Job (`deploy/cloudrun/job.sh`) for sync and `pg_dump` backups; see
+[docs/deploy-cloud-run.md](docs/deploy-cloud-run.md). Other hosting details are in
 [docs/hosting.md](docs/hosting.md), and database setup is in
 [docs/database.md](docs/database.md).
 

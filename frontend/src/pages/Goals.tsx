@@ -1,3 +1,4 @@
+import DirectionCard from "../components/DirectionCard";
 import GoalsCard from "../components/GoalsCard";
 import InsightsPanel from "../components/InsightsPanel";
 import { useFinance } from "../data/financeContext";
@@ -6,6 +7,7 @@ export default function Goals() {
   const { goals, createGoal, deleteGoal } = useFinance();
   return (
     <>
+      <DirectionCard />
       <GoalsCard goals={goals} onCreate={createGoal} onDelete={deleteGoal} />
       <InsightsPanel
         page="goals"

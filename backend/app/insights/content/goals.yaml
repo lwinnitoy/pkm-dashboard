@@ -1,3 +1,33 @@
+- key: goals.how-much-in-canada
+  kind: learn
+  position: 5
+  title: How much you need to retire in Canada
+  summary: "A single Canadian needs roughly $170,000 to $1,000,000 saved, in today's dollars, depending on spending, because CPP and OAS already cover about $19,000 a year."
+  body: |
+    It depends on what you'll spend. Average CPP plus full OAS pays a single retiree about **$19,450 a year** (2026), so savings only fund the gap, at about 25× (29× if you retire early).
+
+    The National Institute on Ageing prices a single renter's costs in BC outside Vancouver (2025 prices):
+    - **Modest, ~$26,000 a year:** gap ~$6,900, target about **$170,000**
+    - **Comfortable, ~$43,500:** gap ~$24,000, target about **$600,000**
+    - **Generous, $60,000** (our example, with more travel): gap ~$40,500, target about **$1,000,000**
+
+    A couple gets two sets of benefits, so its comfortable ~$55,300 needs only about **$410,000** together.
+
+    BMO's 2026 survey says Canadians think they need **$1.7 million**. At 4%, that pays ~$68,000 a year on top of CPP and OAS; households headed by someone 65+ spent about $52,000 on average on living costs in 2023. Your own spending is the better input.
+
+    At 4% after inflation, saving from 23 to 65 takes about **$135 a month** for $170,000, **$470** for $600,000 or **$780** for $1,000,000, raised with inflation. Targets assume tax-free TFSA withdrawals; RRSP income is taxed. The cards below cover each piece.
+  sources:
+    - title: National Institute on Ageing (Toronto Metropolitan University) — Cost of Ageing Calculator
+      url: https://coacalculator.ca/
+    - title: Government of Canada — CPP retirement pension, how much you could receive
+      url: https://www.canada.ca/en/services/benefits/publicpensions/cpp/cpp-benefit/amount.html
+    - title: Government of Canada — Old Age Security payment amounts
+      url: https://www.canada.ca/en/services/benefits/publicpensions/cpp/old-age-security/payments.html
+    - title: BMO — 2026 Annual Retirement Survey
+      url: https://newsroom.bmo.com/2026-02-24-BMO-Survey-Canadians-Set-Ambitious-Retirement-Goals-Amid-Rising-Costs-and-Uncertainty
+    - title: Statistics Canada — Household spending by age of reference person (Table 11-10-0227-01)
+      url: https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1110022701
+
 - key: goals.how-much-is-enough
   kind: learn
   position: 10
