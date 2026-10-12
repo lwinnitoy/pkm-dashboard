@@ -28,7 +28,9 @@ Dependencies are locked with hashes: edit `backend/requirements.in` (runtime) or
 `requirements-dev.in` (adds pytest/httpx), then regenerate **both** locks from `backend/`
 with `../.venv/bin/pip-compile --generate-hashes --allow-unsafe --strip-extras
 --output-file=requirements.txt requirements.in` (and the same for `requirements-dev`).
-The images install `requirements.txt` with `--require-hashes`.
+The images install `requirements.txt` with `--require-hashes`. The locks are compiled on
+a Mac, so a dependency that only applies on Linux CPUs is left out unless the `.in` file
+lists it, and the Linux install then fails (why `greenlet` is listed).
 
 `SECRET_ENCRYPTION_KEY` is required (Fernet). Generate one with:
 `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
