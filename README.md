@@ -1,112 +1,135 @@
-# pkm-platform
+# Ledger
 
-A self-hosted "personal cloud" to manage your life. **v1 is a finances MVP**: sync
-bank/credit-card transactions via [Plaid](https://plaid.com), categorize them, and view
-spending on a dashboard. Tasks, subscriptions, and calendar modules are planned to build on
-the same foundation.
+A self-hosted personal-finance app for one person. Ledger pulls in your bank,
+credit-card and investment accounts, sorts transactions into categories, and shows
+where your money goes, what you're worth, and whether you're on track for retirement.
+It runs on your own Google Cloud project or your own machine, so the data stays yours.
 
-## Stack
+## What it does
 
-- **Backend:** Python / FastAPI + SQLAlchemy (SQLite for local dev)
-- **Frontend:** React + TypeScript (Vite), `react-plaid-link`, `recharts`
-- **Bank data:** Plaid — built against **Sandbox** (free mock data); switch to the free
-  **Trial plan** (10 live Production Items) for real accounts.
+- **Syncs accounts through [Plaid](https://plaid.com).** Bank, credit-card and
+  investment accounts (Wealthsimple included). Balances refresh on every sync.
+- **Imports statements Plaid can't reach.** Upload a bank's CSV or Excel export
+  (RBC has a preset). Ledger previews new rows, duplicates and conflicts before
+  writing anything, and flags months missing from your history.
+- **Categorizes transactions.** Plaid's categories map onto a small set of
+  buckets. A correction becomes a merchant rule that sticks on future syncs and
+  imports. Card payments and transfers between your own accounts are kept out of
+  both spending and income.
+- **Budgets.** Monthly limits per category, with spent and remaining for any month.
+- **Cash flow.** Income against spending over time, plus top merchants and a
+  category comparison.
+- **Net worth.** A daily balance snapshot for every account builds the history.
+  Plaid only reports *current* balances, so this history can't be re-downloaded and
+  is backed up daily.
+- **Investments.** Holdings, cost basis, gain and allocation.
+- **Retirement goals.** Projections from your current portfolio, contributions and
+  an expected return, alongside reading cards on budgeting and Canadian retirement
+  accounts.
 
-## Prerequisites
+## Quick start (local, Plaid Sandbox)
 
-- Python 3.11+ and Node 18+
-- A free Plaid account → `client_id` + Sandbox `secret` from
-  [dashboard.plaid.com](https://dashboard.plaid.com) → Team Settings → Keys.
-
-## Setup & run
-
-### Backend
+Prerequisites: Python 3.11+, Node 20.19+ (or 22.12+), and a free Plaid account (the
+`client_id` and Sandbox `secret` are under **Team Settings → Keys** at
+[dashboard.plaid.com](https://dashboard.plaid.com)).
 
 ```bash
+# Backend: http://localhost:8000 (API docs at /docs)
 python3 -m venv .venv
 .venv/bin/pip install -r backend/requirements.txt
-
 cd backend
-cp .env.example .env                     # paste your PLAID_CLIENT_ID / PLAID_SECRET
-../.venv/bin/uvicorn app.main:app        # http://localhost:8000  (docs at /docs)
+cp .env.example .env      # set PLAID_CLIENT_ID, PLAID_SECRET, SECRET_ENCRYPTION_KEY
+../.venv/bin/uvicorn app.main:app --reload
 ```
-
-Tip: `source .venv/bin/activate` first, then you can just run `uvicorn app.main:app`.
-The SQLite DB (`pkm.db`) and category seed data are created automatically on first boot.
-
-### Frontend
 
 ```bash
+# Frontend: http://localhost:5173
 cd frontend
 npm install
-cp .env.example .env          # VITE_API_BASE defaults to http://localhost:8000
-npm run dev                   # http://localhost:5173
+cp .env.example .env      # VITE_API_BASE defaults to http://localhost:8000
+npm run dev
 ```
 
-## Using it
+On first boot the SQLite database (`backend/pkm.db`), its tables and the category
+list are created automatically. Open the app, go to **Accounts → Connect a bank**,
+pick any Sandbox institution, sign in with `user_good` / `pass_good`, and press
+**Sync now**.
 
-1. Open the dashboard → **Connect a bank**. In Sandbox, use any test institution with
-   credentials `user_good` / `pass_good`.
-2. Click **Sync now** to pull transactions via Plaid's `/transactions/sync`.
-3. The dashboard shows total spend, a per-category breakdown, and recent transactions.
+## Configuration
 
-To go live: set `PLAID_ENV=production` (on a Plaid Trial plan) and re-link your real
-institution.
+Everything lives in `backend/.env` (see [backend/.env.example](backend/.env.example)).
 
-## How the Plaid sync works
+| Variable | What it does |
+|---|---|
+| `SECRET_ENCRYPTION_KEY` | **Required.** Fernet key that encrypts Plaid access tokens at rest. Generate one with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. Keep it stable and backed up: a different key makes every stored token unreadable. |
+| `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV` | Plaid credentials; `PLAID_ENV` is `sandbox` or `production`. |
+| `PLAID_COUNTRY_CODES` | Defaults to `US,CA`. Canadian institutions need `CA`. |
+| `PLAID_REDIRECT_URI` | Needed for OAuth banks. Must be HTTPS and exactly match an allowed redirect URI in the Plaid dashboard. |
+| `APP_PASSWORD` | Turns on the login screen. Blank means no login, which is fine only on your own machine. |
+| `DATABASE_URL` | SQLite by default; a `postgresql+psycopg://…` URL in the cloud. |
+| `SYNC_INTERVAL_HOURS` | Automatic sync for an always-on host (`0` = off). |
+| `TZ` | Time zone for "today" and "this month". Production uses `America/Vancouver`. |
 
-`create-link-token` → Plaid Link (user auth) → `exchange-token` (stores `access_token`) →
-`sync` (cursor-based incremental fetch; Plaid returns `added`/`modified`/`removed`, so dedup
-is handled by the cursor rather than by us).
+## Connecting accounts
 
-## Connecting Wealthsimple / Canadian investment accounts
+- **Going live.** Set `PLAID_ENV=production` with production keys. Plaid's free
+  Trial plan covers up to 10 linked institutions. Then link your real institutions.
+- **Wealthsimple and other investment accounts.** Link asks for `transactions` and
+  adds `investments` as an optional consent, so investment accounts come along
+  without hiding institutions that don't offer them. Wealthsimple is production-only
+  and needs `CA` in `PLAID_COUNTRY_CODES`.
+- **Banks Plaid can't link (RBC).** RBC's push-notification sign-in check is
+  incompatible with Plaid's background refresh, so linking fails with "your account
+  settings are incompatible". Use **Import** with the bank's CSV/Excel export
+  instead. Give the account a starting balance, and later imports roll it forward.
+  See [docs/statement-imports.md](docs/statement-imports.md).
+- **Reconnecting a bank.** When a bank needs you to sign in again, Sync names it
+  (`ITEM_LOGIN_REQUIRED`). Link it again from Accounts: the existing accounts and
+  their history carry over without duplicates.
 
-Plaid supports Wealthsimple (Canada). Link is initialized with `transactions` as the
-primary product (so the institution list isn't over-filtered) and `investments` in
-`PLAID_ADDITIONAL_CONSENTED_PRODUCTS`, which captures investment consent *if* the
-institution supports it — without hiding institutions that don't. Requires
-`PLAID_ENV=production` (Wealthsimple isn't in Sandbox) and `CA` in `PLAID_COUNTRY_CODES`.
+## Keeping data fresh
 
-Cash/spending transactions sync through `/transactions/sync`; investment **holdings** and
-investment transactions (buys/sells/dividends) sync through the **investments module**
-(`/api/investments/*`, backed by Plaid's `/investments/holdings/get` and
-`/investments/transactions/get`). Endpoints:
+- **Sync now** on the Accounts page pulls new transactions, investments and
+  balances, and records today's balance snapshot.
+- **The daily job** (`python -m app.jobs`) does the same unattended. In production
+  a Cloud Run Job runs it every morning, after a `pg_dump` backup.
+- **On an always-on host**, the in-process scheduler takes the daily snapshot, and
+  syncs too if `SYNC_INTERVAL_HOURS` is set.
 
-- `POST /api/investments/sync` — best-effort per item (items without investment accounts
-  are skipped, not errored); upserts securities/holdings/transactions (idempotent).
-- `GET /api/investments/holdings` — current positions with security + account info.
-- `GET /api/investments/transactions` — paginated investment transactions.
-- `GET /api/investments/portfolio` — total value, value by account, top holdings.
+## Deploying
 
-## Importing statements for banks Plaid can't link
+Production runs on **Google Cloud Run + Neon Postgres** behind Google sign-in, for
+about $0/month inside the free tiers. A daily Cloud Run Job handles backup and sync.
+The full walkthrough, including deploys, rollbacks and **restoring a backup**, is
+[docs/deploy-cloud-run.md](docs/deploy-cloud-run.md). Code changes ship with
+`deploy/cloudrun/deploy.sh`.
 
-Not every institution is linkable — RBC's in-app push MFA is incompatible with Plaid's
-refresh model, so it fails with "your account settings are incompatible" no matter how
-the app is configured. For those, the **Import** page takes a CSV/Excel statement export
-and loads it into the same transactions the dashboard already uses.
+To run it on your own box with Docker Compose instead, see
+[docs/hosting.md](docs/hosting.md).
 
-Uploading previews first: it reports how many rows are new, how many are duplicates from
-an overlapping statement period, and how many conflict with a stored amount — plus any
-gap in your history the file would leave behind. Nothing is written until you confirm.
+## Development
 
-See [docs/statement-imports.md](docs/statement-imports.md) for how deduplication works
-and how to add a preset for another bank.
-
-## Project layout
-
-- `backend/app/models.py` — `plaid_items`, `accounts`, `transactions`, `categories`
-- `backend/app/routers/plaid.py` — link / exchange / sync
-- `backend/app/routers/finance.py` — spending dashboard read endpoints
-- `backend/app/routers/investments.py` — investments sync + holdings/portfolio endpoints
-- `backend/app/imports/` + `routers/imports.py` — CSV/Excel statement import
-- `frontend/src/` — `api/` client, `components/`, `pages/`
-
-## Roadmap / hardening TODOs
-
-- ~~Encrypt `access_token` at rest~~ ✅ done — Fernet-encrypted via `EncryptedString`
-  (`app/crypto.py`); requires `SECRET_ENCRYPTION_KEY` in `.env`.
-- Scheduled background sync (APScheduler) — currently manual via "Sync now".
-- Docker Compose + hosting.
-- Future modules: tasks, subscriptions engine, calendar sync.
-- Planned directions (email recap, Databricks analytics layer) — [docs/roadmap.md](docs/roadmap.md).
+```bash
+cd backend && ../.venv/bin/pytest            # backend tests: no Plaid or network needed
+cd frontend && npm run build && npm run lint # type-check, build and lint the UI
 ```
+
+Schema changes need an Alembic migration (`backend/alembic/versions/`); the test suite
+runs the migrations and fails on drift. See [docs/database.md](docs/database.md).
+
+**Layout**
+- `backend/app/routers/`: API endpoints: `plaid` (link, sync), `finance` (transactions,
+  spending, net worth, goals), `budgets`, `investments`, `imports`, `insights`, `auth`
+- `backend/app/imports/`: statement parsing, deduplication and balance roll-forward
+- `backend/app/investments/`: holdings valuation and the portfolio-value seam
+- `backend/app/jobs.py`: the daily backup-and-sync entry point
+- `frontend/src/`: `pages/` (one per nav entry), `components/`, `api/client.ts`
+
+**Docs**
+- [deploy-cloud-run.md](docs/deploy-cloud-run.md): production setup, deploys and restores
+- [statement-imports.md](docs/statement-imports.md): imports, deduplication, adding a bank preset
+- [investments-contract.md](docs/investments-contract.md): how portfolio value is computed and used
+- [insights.md](docs/insights.md): the reading cards on Goals and Budgets
+- [auto-categorization.md](docs/auto-categorization.md): research for smarter categorization
+- [database.md](docs/database.md), [hosting.md](docs/hosting.md), [hosting-options.md](docs/hosting-options.md)
+- [roadmap.md](docs/roadmap.md): what's planned next

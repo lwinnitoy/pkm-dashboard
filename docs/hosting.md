@@ -1,29 +1,37 @@
 # Hosting
 
-> **Current target: Google Cloud Run + Neon**, with Google sign-in (IAP) in front
-> and a daily Cloud Run Job for sync and backups. Step-by-step:
-> [deploy-cloud-run.md](deploy-cloud-run.md). Why this shape:
-> [hosting-options.md](hosting-options.md). The Replit and Docker Compose notes
-> below still work.
+> **Production runs on Google Cloud Run + Neon**, with Google sign-in (IAP) in front
+> and a daily Cloud Run Job for backups and sync. Step by step:
+> [deploy-cloud-run.md](deploy-cloud-run.md). Why that shape:
+> [hosting-options.md](hosting-options.md). This page covers the other way to run
+> it: Docker Compose, on your own machine or a box you control.
 
-The app ships as two images — a FastAPI backend (migrated on start) and an
-nginx-served frontend that reverse-proxies `/api` to the backend — plus Postgres.
-[docker-compose.yml](../docker-compose.yml) wires them together for a local
-production-like run and is the template for a real deploy.
+## Two ways the app is packaged
 
-## Prerequisites: secrets
+- **One container** (root [Dockerfile](../Dockerfile)), used by Cloud Run. The UI is
+  built to static files and FastAPI serves them next to the API (`mount_frontend`
+  in `app/main.py`), so everything is on one port.
+- **Two containers plus Postgres** ([docker-compose.yml](../docker-compose.yml)): the
+  backend image (`backend/Dockerfile`) and an nginx-served frontend that
+  reverse-proxies `/api` to it. Use this for a local production-like run, or to
+  self-host on a single box.
 
-Auth and encryption are **required** for any exposed deployment. In `backend/.env`
-(or your host's secret store) set:
+Both run `alembic upgrade head` before starting, so the schema is created or updated
+before any traffic arrives.
+
+## Secrets
+
+Auth and encryption are **required** for anything reachable from a network. In
+`backend/.env` (or your host's secret store) set:
 
 | Var | Why | Generate |
 |-----|-----|----------|
 | `SECRET_ENCRYPTION_KEY` | Fernet key encrypting Plaid tokens at rest | `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
-| `APP_PASSWORD` | Enables single-user login (API is open if blank!) | a long random passphrase |
+| `APP_PASSWORD` | Turns on the login screen (the API is open if blank) | a long random passphrase |
 | `PLAID_CLIENT_ID` / `PLAID_SECRET` / `PLAID_ENV=production` | Live bank data | Plaid dashboard |
 
-`AUTH_SECRET` is optional (defaults to `SECRET_ENCRYPTION_KEY`). `DATABASE_URL` is
-set by compose to the bundled Postgres; point it at a managed Postgres for cloud.
+`AUTH_SECRET` is optional (defaults to `SECRET_ENCRYPTION_KEY`). Compose sets
+`DATABASE_URL` to its bundled Postgres.
 
 ## Local production-like run
 
@@ -32,64 +40,19 @@ cp backend/.env.example backend/.env   # fill in the secrets above
 docker compose up --build              # app at http://localhost:8080
 ```
 
-`docker compose config` validates the file without starting anything. The backend
-runs `alembic upgrade head` on start, so the schema is created/updated before it
-serves traffic.
+`docker compose config` validates the file without starting anything.
 
-## Deploying to a host
+## Self-hosting on one box
 
-Two common shapes:
+Copy the repo to a VPS, set `backend/.env`, and run `docker compose up -d --build`
+behind a TLS-terminating reverse proxy (Caddy or Traefik) pointed at the `frontend`
+service. Two things the Cloud Run setup does for you that you'd do here yourself:
 
-1. **One box (VPS + Docker Compose).** Copy the repo, set `backend/.env`, run
-   `docker compose up -d --build` behind a TLS-terminating reverse proxy (Caddy/
-   Traefik) pointed at the `frontend` service. Simplest for a self-hosted personal
-   cloud.
-2. **Managed platform (Fly.io / Railway / Render).** Deploy the backend image with
-   a managed Postgres attached (set `DATABASE_URL` to
-   `postgresql+psycopg://…?sslmode=require`); deploy the frontend image (or host the
-   static `dist/` on a CDN and point `VITE_API_BASE` at the backend URL).
+- **Sync.** The box is always on, so the in-process scheduler can sync: set
+  `SYNC_INTERVAL_HOURS` (e.g. `6`). The daily balance snapshot runs either way. Or
+  leave it at `0` and cron `cd backend && python -m app.jobs` instead.
+- **Backups.** Schedule a `pg_dump` off the box. Net-worth history comes from daily
+  balance snapshots, which Plaid can't give back. The restore steps in
+  [deploy-cloud-run.md](deploy-cloud-run.md#day-to-day) work for any Postgres.
 
-### Managed Postgres
-See [database.md](database.md). In short: create the DB, set `DATABASE_URL` with the
-`postgresql+psycopg://` scheme, and the backend applies migrations on boot.
-
-## Replit (single-port)
-
-Replit runs one process on one port, so there the frontend is built to static files
-and **served by FastAPI** (`app/main.py`) rather than nginx — [.replit](../.replit)
-handles the build/run.
-
-1. Import the repo into Replit.
-2. Add **PostgreSQL** (the Database tool) — it sets `DATABASE_URL` automatically; the
-   app normalizes the bare `postgres://` URL to the psycopg driver.
-3. Set **Deployment Secrets** (on each deployment below): `SECRET_ENCRYPTION_KEY`,
-   `APP_PASSWORD`, `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV=production`.
-4. **Web app → Autoscale** (`deploymentTarget = "cloudrun"`). Build compiles the UI +
-   installs deps; run migrates then serves on `$PORT`.
-
-Autoscale scales to zero, so the **in-process scheduler is not reliable there** — do
-**not** set `SYNC_INTERVAL_HOURS`. Run the jobs separately (next section).
-
-> Alternative: a **Reserved VM** (`deploymentTarget = "gce"`, always-on, ~$10/mo, paid
-> plan) runs the in-process scheduler directly — set `SYNC_INTERVAL_HOURS=6` and skip
-> the scheduled deployment below.
-
-## Automatic sync + snapshots
-
-`app/jobs.py` is a standalone entrypoint that syncs transactions and snapshots
-balances (same code as the button + daily job; idempotent). Run it on a schedule:
-
-- **Replit Scheduled Deployment** — build `cd backend && pip install -r requirements.txt`,
-  run `cd backend && python -m app.jobs`, schedule daily (e.g. `0 6 * * *`), with the
-  same secrets + `DATABASE_URL`.
-- **Or any external cron** (GitHub Actions, cron-job.org) invoking the same command / a
-  container.
-
-On an always-on host (Reserved VM / VPS) you can instead set `SYNC_INTERVAL_HOURS` > 0
-and let the in-process APScheduler handle it. The eventual upgrade for either path is
-Plaid `SYNC_UPDATES_AVAILABLE` webhooks once there's a stable public URL.
-
-## Still to wire up (tracked)
-- **Backups:** enable automated backups on the managed Postgres — net-worth
-  snapshot history cannot be re-fetched from Plaid.
-- **Plaid webhooks:** replace interval polling with event-driven sync.
+For a managed Postgres instead of the bundled one, see [database.md](database.md).

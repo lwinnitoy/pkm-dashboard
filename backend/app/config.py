@@ -49,8 +49,8 @@ class Settings(BaseSettings):
 
     @property
     def sqlalchemy_url(self) -> str:
-        """DATABASE_URL normalized to a driver SQLAlchemy understands. Hosts like
-        Replit/Heroku hand out bare postgres:// URLs; select the psycopg driver."""
+        """DATABASE_URL normalized to a driver SQLAlchemy understands. Many hosts
+        hand out bare postgres:// URLs; select the psycopg driver."""
         url = self.database_url
         for prefix in ("postgresql://", "postgres://"):
             if url.startswith(prefix):

@@ -121,7 +121,8 @@ Conventions that keep a recurring writer well-behaved:
   numbers should state its assumptions (return, inflation, contribution).
 - A generator that runs off-box (a DAG elsewhere) needs both the app's bearer
   token and model API credentials. Keep them in that platform's secret store, the
-  way `SECRET_ENCRYPTION_KEY` and the Plaid keys are kept in Replit Secrets.
+  way `SECRET_ENCRYPTION_KEY` and the Plaid keys are kept in
+  Secret Manager.
 
 ## Adding the panel to another page
 

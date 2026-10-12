@@ -41,7 +41,7 @@ def create_link_token():
     client = get_plaid_client()
     request = LinkTokenCreateRequest(
         products=[Products(p) for p in settings.product_list],
-        client_name="PKM Platform",
+        client_name="Ledger",
         country_codes=[CountryCode(c) for c in settings.country_code_list],
         language="en",
         user=LinkTokenCreateRequestUser(client_user_id="local-user"),

@@ -24,7 +24,7 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
     <div className="login-screen">
       <form className="login-card" onSubmit={submit}>
         <div className="sidebar-logo" />
-        <h1>Finances</h1>
+        <h1>Ledger</h1>
         <p className="muted">Enter your password to continue.</p>
         <input
           type="password"

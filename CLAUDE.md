@@ -4,10 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A self-hosted "personal cloud." **v1 is a finances MVP**: sync bank/credit-card
-transactions via Plaid, categorize them, and view spending / net worth / retirement-goal
-projections on a dashboard. Tasks, subscriptions, and calendar modules are planned on the
-same foundation.
+**Ledger**, a self-hosted personal-finance app for one person. It syncs bank, credit-card
+and investment accounts via Plaid, imports CSV/Excel statements for banks Plaid can't
+link, categorizes transactions, and shows spending, budgets, cash flow, net worth and
+retirement-goal projections. The scope is personal finance only; there are no plans for
+non-finance modules. (The repo and some identifiers still say `pkm`, from an earlier,
+broader plan.)
 
 - **Backend:** Python 3.11+ / FastAPI + SQLAlchemy 2.0 + Alembic (SQLite for local dev, Postgres via `psycopg` in the cloud), `plaid-python`, APScheduler
 - **Frontend:** React 19 + TypeScript (Vite), `react-plaid-link`, `recharts`
@@ -35,11 +37,11 @@ Verify with `alembic upgrade head && alembic check` (the latter reports model/mi
 Write `downgrade()` defensively: a dev DB built by `create_all` has backend-generated
 constraint names, and a half-applied upgrade has missing objects. So look up FKs by their
 referred table (not by name) and check that each index/column exists before dropping it.
-`b1c4f7a29e3d_add_manual_statement_imports.py` has the pattern. To test a migration, run
-upgrade → downgrade base → upgrade.
+`b1c4f7a29e3d_add_manual_statement_imports.py` has the pattern. `tests/test_migrations.py` runs
+upgrade → `check` → downgrade base → upgrade on every test run.
 
 ```bash
-cd backend && ../.venv/bin/pytest          # 142 tests, no external services needed
+cd backend && ../.venv/bin/pytest          # no external services needed
 ```
 
 ### Frontend
@@ -54,6 +56,8 @@ npm run lint              # oxlint
 
 The backend has a pytest suite (`backend/tests/`) using an in-memory SQLite DB per test
 and seeding helpers in `tests/factories.py`; no Plaid credentials or network needed.
+`conftest.py` stops settings from reading `backend/.env`, so a local password or Plaid
+config can't change test results; Plaid clients are faked per test module.
 The **frontend has no tests** — `npm run build` (tsc) and `npm run lint` are the checks.
 
 ## Architecture
@@ -64,13 +68,24 @@ The **frontend has no tests** — `npm run build` (tsc) and `npm run lint` are t
 
 Sync is **cursor-based incremental** (`/transactions/sync`): Plaid returns
 `added`/`modified`/`removed` and a `next_cursor` persisted per `PlaidItem`, so dedup is
-handled by the cursor, not by us. `sync_transactions` also calls `write_snapshots` so
-net-worth history accrues on every manual sync. Sync is triggered three ways, all through
+handled by the cursor, not by us. Each item's pages are gathered before any are applied,
+and each item is synced on its own: one bank failing (e.g. `ITEM_LOGIN_REQUIRED`) lands
+in `skipped_details` instead of stopping the rest. `sync_all_items` always ends with
+`write_snapshots`, so net-worth history accrues on every sync.
+
+**Re-linking** a bank produces a new Plaid Item with new account *and transaction* ids.
+`exchange_token` keeps the existing `PlaidItem` row (matched by institution), re-binds
+accounts by mask, and *detaches* the old transactions (`plaid_transaction_id = NULL`,
+pending ones deleted). The next sync's `_adopt_detached` matches each re-sent
+transaction to its old row by account/date/amount, so history isn't duplicated. The
+replaced Item is removed at Plaid (`remove_item`), as is an item whose last account is
+deleted, because orphaned Items still count toward the plan's Item limit. Sync is triggered three ways, all through
 the same `sync_all_items` path: the "Sync now" button; the in-process APScheduler
 (`app/scheduler.py`), which always runs a daily balance snapshot and adds an interval sync
 when `SYNC_INTERVAL_HOURS > 0`; and `python -m app.jobs` (sync + investments + snapshot),
-for scale-to-zero hosts where the in-process scheduler can't stay up. See
-[docs/hosting.md](docs/hosting.md).
+for scale-to-zero hosts where the in-process scheduler can't stay up (production: the
+daily Cloud Run Job, see [docs/deploy-cloud-run.md](docs/deploy-cloud-run.md)). Every
+step of `app.jobs` runs even if an earlier one fails.
 
 ### Two Plaid data classes, two paths
 - **Cash/spending** transactions → `/transactions/sync` → `routers/plaid.py`, read via `routers/finance.py`.
@@ -150,11 +165,13 @@ Single-user auth (`app/auth.py`): when `APP_PASSWORD` is set, `/api/auth/login` 
 (local dev). New routers should be registered the same protected way. Only `/api/auth/*`
 and `/health` stay open.
 
-For single-port deploys (Cloud Run via the root `Dockerfile`, or Replit), FastAPI also serves `frontend/dist` with an SPA
-fallback, registered *after* the API routers so `/api/*` takes precedence. The Docker
-image runs `alembic upgrade head` before starting uvicorn. Hosting is moving to Cloud Run + Neon behind Google sign-in, with a daily
-Cloud Run Job (`deploy/cloudrun/job.sh`) for sync and `pg_dump` backups; see
-[docs/deploy-cloud-run.md](docs/deploy-cloud-run.md). Other hosting details are in
+For single-port deploys (Cloud Run via the root `Dockerfile`), FastAPI also serves
+`frontend/dist` (`mount_frontend`), registered *after* the API routers so `/api/*` takes
+precedence. That route sits outside auth, so it only serves files that resolve inside
+`dist`; keep that check if you touch it. The Docker image runs `alembic upgrade head`
+before starting uvicorn. Production is Cloud Run + Neon behind Google sign-in (IAP), with
+a daily Cloud Run Job (`deploy/cloudrun/job.sh`) that backs up with `pg_dump` and then
+syncs; see [docs/deploy-cloud-run.md](docs/deploy-cloud-run.md). Other hosting details are in
 [docs/hosting.md](docs/hosting.md), and database setup is in
 [docs/database.md](docs/database.md).
 
@@ -205,8 +222,8 @@ rather than calling `fetch` in components. Note `req()` forces a JSON content-ty
 uploads use the separate `upload()` helper so the browser can set the multipart boundary.
 
 ## Direction
-[docs/roadmap.md](docs/roadmap.md) records planned work that isn't started — an email
-recap module, automatic transaction categorization (researched in
-[docs/auto-categorization.md](docs/auto-categorization.md)), an AI writer for the insight
-cards, and an eventual Databricks migration for the analytics layer. Consult it
-before making data-layer decisions that would be awkward to unwind.
+[docs/roadmap.md](docs/roadmap.md) records planned work: the rest of automatic
+transaction categorization (researched in
+[docs/auto-categorization.md](docs/auto-categorization.md); the detailed Plaid category
+map is done) and an AI writer for the insight cards. Consult it before making
+data-layer decisions that would be awkward to unwind.

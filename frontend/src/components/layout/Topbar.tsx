@@ -6,7 +6,7 @@ import { NAV } from "./nav";
 function useTitle(): string {
   const { pathname } = useLocation();
   const match = NAV.find((n) => (n.end ? pathname === n.to : pathname.startsWith(n.to)));
-  return match?.label ?? "Finances";
+  return match?.label ?? "Ledger";
 }
 
 export default function Topbar() {

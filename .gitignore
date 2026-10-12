@@ -13,7 +13,7 @@ backend/.env
 # Deliberately not a blanket *.csv, so sanitized test fixtures can still be tracked.
 download-transactions*.csv
 statements/
-# Database dumps (e.g. moving off Replit) hold every transaction and the
+# Database dumps (e.g. from moving databases) hold every transaction and the
 # encrypted Plaid tokens.
 *.dump
 *.sql.gz
