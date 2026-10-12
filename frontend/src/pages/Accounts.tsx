@@ -118,7 +118,7 @@ export default function Accounts() {
       sub={accounts.length ? `${accounts.length} accounts` : undefined}
       action={
         <div className="topbar-actions">
-          <PlaidLinkButton onLinked={refresh} />
+          <PlaidLinkButton onLinked={sync} />
           <button className="btn" onClick={sync} disabled={syncing}>
             {syncing ? "Syncing…" : "Sync now"}
           </button>

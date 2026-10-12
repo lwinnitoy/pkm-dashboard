@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   AccountCoverage,
   DateRange,
@@ -8,7 +8,7 @@ import type {
   ImportResult,
   ImportRow,
 } from "../api/client";
-import { api } from "../api/client";
+import { api, errorText } from "../api/client";
 import { Card, EmptyState } from "../components/ui";
 import { useFinance } from "../data/financeContext";
 import { currency, longDate } from "../lib/format";
@@ -23,6 +23,11 @@ const ACCOUNT_KINDS = [
   { key: "credit", label: "Credit card", type: "credit", subtype: "credit card" },
   { key: "loan", label: "Loan", type: "loan", subtype: null },
 ] as const;
+
+/** Statement amount in the Transactions table's style: money in carries a "+". */
+function signedAmount(amount: number): string {
+  return `${amount < 0 ? "+" : ""}${currency(Math.abs(amount))}`;
+}
 
 function rangeLabel(r: DateRange): string {
   return `${longDate(r.start)} – ${longDate(r.end)}`;
@@ -59,7 +64,7 @@ function RowTable({ rows }: { rows: ImportRow[] }) {
             <td>{longDate(r.date)}</td>
             <td>{r.description}</td>
             <td className={`num ${r.amount >= 0 ? "amt-out" : "amt-in"}`}>
-              {currency(Math.abs(r.amount))}
+              {signedAmount(r.amount)}
             </td>
             <td>
               <span className={r.category === "Transfers" ? "tag status-transfer" : "muted"}>
@@ -69,7 +74,8 @@ function RowTable({ rows }: { rows: ImportRow[] }) {
             <td>
               <span className={`tag status-${r.status}`}>{r.status}</span>
               {r.existing_amount != null && (
-                <span className="muted"> was {currency(Math.abs(r.existing_amount))}</span>
+                // Signed, so a charge stored as a refund (or vice versa) shows up.
+                <span className="muted"> was {signedAmount(r.existing_amount)}</span>
               )}
             </td>
           </tr>
@@ -132,7 +138,7 @@ export default function Import() {
       setPreview(await api.previewImport(chosen, accountId, preset));
     } catch (e) {
       setPreview(null);
-      setError(String(e));
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }
@@ -152,20 +158,29 @@ export default function Import() {
       setResult(committed);
       setPreview(null);
       setFile(null);
+      clearFileInput();
       setIncludeConflicts(false);
       loadStatus();
       await refresh();
     } catch (e) {
-      setError(String(e));
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }
+  }
+
+  // The file input is uncontrolled; clearing `file` alone leaves the old name
+  // showing, and picking the same file again wouldn't fire onChange.
+  const fileInput = useRef<HTMLInputElement>(null);
+  function clearFileInput() {
+    if (fileInput.current) fileInput.current.value = "";
   }
 
   function reset() {
     setPreview(null);
     setResult(null);
     setFile(null);
+    clearFileInput();
     setError(null);
     setIncludeConflicts(false);
   }
@@ -248,6 +263,7 @@ export default function Import() {
           <label>
             File
             <input
+              ref={fileInput}
               type="file"
               accept=".csv,.xlsx,.xlsm,text/csv"
               disabled={busy}
@@ -371,12 +387,16 @@ export default function Import() {
                       onChange={async (e) => {
                         const kind = ACCOUNT_KINDS.find((k) => k.key === e.target.value);
                         if (!kind) return;
-                        await api.updateManualAccount(c.account_id, {
-                          type: kind.type,
-                          subtype: kind.subtype,
-                        });
-                        loadStatus();
-                        await refresh();
+                        try {
+                          await api.updateManualAccount(c.account_id, {
+                            type: kind.type,
+                            subtype: kind.subtype,
+                          });
+                          loadStatus();
+                          await refresh();
+                        } catch (err) {
+                          setError(`Couldn't change the account kind: ${errorText(err)}`);
+                        }
                       }}
                     >
                       {ACCOUNT_KINDS.map((k) => (

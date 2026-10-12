@@ -9,7 +9,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { Goal, GoalInput } from "../api/client";
+import { errorText, type Goal, type GoalInput } from "../api/client";
 import { CHART } from "../lib/charts";
 import { parseDate } from "../lib/dates";
 import { currency, currencyCompact, currencyWhole, longDate } from "../lib/format";
@@ -18,20 +18,23 @@ import { EmptyState } from "./ui";
 /** Compound-growth curve mirroring the backend projection, for display only. */
 function projectionSeries(goal: Goal): { year: number; value: number }[] {
   if (goal.current_value == null) return [];
+  const start = goal.current_value;
   const now = new Date();
   const target = parseDate(goal.target_date);
-  const totalMonths = Math.max(
-    0,
-    (target.getFullYear() - now.getFullYear()) * 12 + (target.getMonth() - now.getMonth()),
-  );
+  // Fractional months, as the backend counts them, so the last point lands on
+  // the "Projected at target" figure instead of up to 11 months short of it.
+  const totalMonths = Math.max(0, (target.getTime() - now.getTime()) / 86_400_000 / 30.4375);
   const r = Math.pow(1 + goal.expected_annual_return, 1 / 12) - 1;
-  const pts: { year: number; value: number }[] = [];
-  for (let m = 0; m <= totalMonths; m += 12) {
+  const valueAt = (m: number) => {
     const growth = Math.pow(1 + r, m);
     const annuity = Math.abs(r) < 1e-9 ? m : (growth - 1) / r;
-    const value = goal.current_value * growth + goal.monthly_contribution * annuity;
-    pts.push({ year: now.getFullYear() + Math.round(m / 12), value: Math.round(value) });
+    return Math.round(start * growth + goal.monthly_contribution * annuity);
+  };
+  const pts: { year: number; value: number }[] = [];
+  for (let m = 0; now.getFullYear() + m / 12 < target.getFullYear(); m += 12) {
+    pts.push({ year: now.getFullYear() + m / 12, value: valueAt(m) });
   }
+  pts.push({ year: target.getFullYear(), value: valueAt(totalMonths) });
   return pts;
 }
 
@@ -54,12 +57,28 @@ export default function GoalsCard({
 }) {
   const [form, setForm] = useState<GoalInput>(EMPTY);
   const [showForm, setShowForm] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onCreate(form);
-    setForm(EMPTY);
-    setShowForm(false);
+    try {
+      await onCreate(form);
+      setForm(EMPTY);
+      setShowForm(false);
+      setError(null);
+    } catch (err) {
+      setError(`Couldn't save the goal: ${errorText(err)}`);
+    }
+  };
+
+  const remove = async (g: Goal) => {
+    if (!window.confirm(`Delete the goal "${g.name}"?`)) return;
+    try {
+      await onDelete(g.id);
+      setError(null);
+    } catch (err) {
+      setError(`Couldn't delete the goal: ${errorText(err)}`);
+    }
   };
 
   return (
@@ -70,6 +89,12 @@ export default function GoalsCard({
           {showForm ? "Cancel" : "Add goal"}
         </button>
       </div>
+
+      {error && (
+        <div className="error" role="alert">
+          {error}
+        </div>
+      )}
 
       {showForm && (
         <form className="form-grid" onSubmit={submit}>
@@ -141,7 +166,7 @@ export default function GoalsCard({
                   {currencyWhole(g.target_amount)} by {longDate(g.target_date)}
                 </span>
               </div>
-              <button className="link-danger" onClick={() => onDelete(g.id)}>
+              <button className="link-danger" onClick={() => remove(g)}>
                 Delete
               </button>
             </div>

@@ -1,35 +1,42 @@
 import { useCallback, useEffect, useState } from "react";
 import { usePlaidLink, type PlaidLinkOnSuccess } from "react-plaid-link";
-import { api } from "../api/client";
+import { api, errorText } from "../api/client";
 
 interface Props {
   onLinked: () => void;
 }
 
 // react-plaid-link stashes the link token so we can resume after an OAuth bank
-// redirect (e.g. RBC), which reloads the app at the registered redirect URI with
+// redirect, which reloads the app at the registered redirect URI with
 // ?oauth_state_id in the URL.
 const TOKEN_KEY = "plaid_link_token";
-const isOAuthReturn =
-  typeof window !== "undefined" && window.location.search.includes("oauth_state_id");
+
+// The URL the bank returned to, captured at page load: AppShell then forwards the
+// return to /accounts, but Link has to be handed the address Plaid redirected to.
+// Cleared once the link completes, so a later visit starts a fresh Link.
+let oauthReturnUri: string | null =
+  typeof window !== "undefined" && window.location.search.includes("oauth_state_id")
+    ? window.location.href
+    : null;
 
 export default function PlaidLinkButton({ onLinked }: Props) {
+  const [receivedRedirectUri] = useState(oauthReturnUri);
   // On an OAuth return, reuse the token created before the redirect.
   const [linkToken, setLinkToken] = useState<string | null>(
-    isOAuthReturn ? localStorage.getItem(TOKEN_KEY) : null,
+    receivedRedirectUri ? localStorage.getItem(TOKEN_KEY) : null,
   );
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isOAuthReturn) return; // mid-OAuth: keep the existing token
+    if (receivedRedirectUri) return; // mid-OAuth: keep the existing token
     api
       .createLinkToken()
       .then((r) => {
         setLinkToken(r.link_token);
         localStorage.setItem(TOKEN_KEY, r.link_token);
       })
-      .catch((e) => setError(String(e)));
-  }, []);
+      .catch((e) => setError(errorText(e)));
+  }, [receivedRedirectUri]);
 
   const onSuccess = useCallback<PlaidLinkOnSuccess>(
     async (public_token, metadata) => {
@@ -43,28 +50,29 @@ export default function PlaidLinkButton({ onLinked }: Props) {
           metadata.institution?.institution_id ?? undefined,
         );
         localStorage.removeItem(TOKEN_KEY);
-        if (isOAuthReturn) {
+        if (receivedRedirectUri) {
+          oauthReturnUri = null;
           // Drop ?oauth_state_id so a refresh doesn't re-trigger Link.
           window.history.replaceState({}, "", window.location.pathname);
         }
         onLinked();
       } catch (e) {
-        setError(String(e));
+        setError(errorText(e));
       }
     },
-    [onLinked],
+    [onLinked, receivedRedirectUri],
   );
 
   const { open, ready } = usePlaidLink({
     token: linkToken,
     onSuccess,
-    ...(isOAuthReturn ? { receivedRedirectUri: window.location.href } : {}),
+    ...(receivedRedirectUri ? { receivedRedirectUri } : {}),
   });
 
   // Automatically re-open Link when returning from the bank's OAuth page.
   useEffect(() => {
-    if (isOAuthReturn && ready) open();
-  }, [ready, open]);
+    if (receivedRedirectUri && ready) open();
+  }, [receivedRedirectUri, ready, open]);
 
   if (error) return <span className="error">Link error: {error}</span>;
 

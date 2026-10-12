@@ -31,10 +31,10 @@ export function currencyWhole(n: number | null | undefined): string {
   return currencyWholeFmt.format(n);
 }
 
-/** $1.2K / $3.4M — for chart axes and dense tables */
+/** $1.2K / $3.4M / -$1.2K — for chart axes and dense tables */
 export function currencyCompact(n: number | null | undefined): string {
   if (n == null) return "—";
-  return `$${compactFmt.format(n)}`;
+  return `${n < 0 ? "-" : ""}$${compactFmt.format(Math.abs(n))}`;
 }
 
 /** 12.3% with an explicit sign */

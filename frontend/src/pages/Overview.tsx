@@ -7,7 +7,8 @@ import { cashFlowTotals, netWorthChange, savingsRate } from "../lib/derive";
 import { currency, currencyWhole, percent } from "../lib/format";
 
 export default function Overview() {
-  const { netWorth, trend, summary, transactions, portfolio, loading } = useFinance();
+  const { netWorth, trend, summary, transactions, portfolio, portfolioError, loading } =
+    useFinance();
 
   const nw = netWorthChange(netWorth);
   const { income, spending } = cashFlowTotals(trend);
@@ -55,6 +56,8 @@ export default function Overview() {
             />
           ) : loading ? (
             <EmptyState>Loading…</EmptyState>
+          ) : portfolioError ? (
+            <EmptyState>Couldn't load investments: {portfolioError}</EmptyState>
           ) : (
             <EmptyState>
               No investments linked. <Link to="/accounts">Connect an account</Link>.

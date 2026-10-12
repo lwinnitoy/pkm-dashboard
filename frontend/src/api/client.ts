@@ -279,16 +279,55 @@ export interface Insight {
   updated_at: string; // naive UTC timestamp
 }
 
+/** A bank a sync couldn't complete, with Plaid's reason (e.g. ITEM_LOGIN_REQUIRED). */
+export interface SkippedItem {
+  institution: string;
+  error_code: string;
+  message: string;
+}
+
+/** A caught error as text for the UI. */
+export function errorText(e: unknown): string {
+  // fetch rejects with a bare TypeError ("Failed to fetch") when nothing answers.
+  if (e instanceof TypeError) return `Can't reach the server (${e.message}).`;
+  return e instanceof Error ? e.message : String(e);
+}
+
+/** FastAPI's `detail`: a sentence for HTTPException, a list of field errors for a 422. */
+function describeError(body: string, res: Response): string {
+  try {
+    const { detail } = JSON.parse(body) as { detail?: unknown };
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail)) {
+      return detail
+        .map((d: { loc?: unknown[]; msg?: string }) =>
+          [d.loc?.filter((l) => l !== "body").join("."), d.msg].filter(Boolean).join(": "),
+        )
+        .join("; ");
+    }
+  } catch {
+    // Not JSON (a proxy error page, say); fall through to the status line.
+  }
+  return `${res.status} ${res.statusText}`.trim();
+}
+
+// A dashboard refresh fires ~10 requests at once; an expired token should reload
+// the page once, not once per request.
+let reloading = false;
+
 async function handle<T>(res: Response): Promise<T> {
   if (res.status === 401) {
     // Token missing/expired — drop it and bounce back to the login screen.
     clearToken();
-    window.location.reload();
-    throw new Error("Unauthorized");
+    if (!reloading) {
+      reloading = true;
+      window.location.reload();
+    }
+    throw new Error("Your session expired. Signing in again…");
   }
   if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw new Error(`${res.status} ${res.statusText}: ${detail}`);
+    const body = await res.text().catch(() => "");
+    throw new Error(describeError(body, res));
   }
   // DELETEs answer 204 with no body; parsing it would throw after the request
   // had already succeeded.
@@ -363,16 +402,20 @@ export const api = {
     }),
 
   sync: () =>
-    req<{ added: number; modified: number; removed: number }>("/api/plaid/sync", {
-      method: "POST",
-    }),
+    req<{
+      added: number;
+      modified: number;
+      removed: number;
+      items_skipped: number;
+      skipped_details: SkippedItem[];
+    }>("/api/plaid/sync", { method: "POST" }),
 
   investmentsSync: () =>
     req<{
       items_synced: number;
       items_skipped: number;
       holdings: number;
-      skipped_details: { institution: string; error_code: string; message: string }[];
+      skipped_details: SkippedItem[];
     }>("/api/investments/sync", { method: "POST" }),
 
   transactions: (limit = 50, offset = 0, filters: TransactionFilters = {}) => {
