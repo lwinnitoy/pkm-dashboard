@@ -406,6 +406,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
   padding: 12px 0;
   border-bottom: 1px solid var(--border);
 }
@@ -484,6 +486,11 @@
 /* ============================================================
    Tables
    ============================================================ */
+/* Wide tables scroll sideways on a phone instead of stretching the page. */
+.table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
 .table {
   width: 100%;
   border-collapse: collapse;
@@ -665,7 +672,8 @@
 }
 .month-totals {
   display: flex;
-  gap: 32px;
+  flex-wrap: wrap;
+  gap: 16px 32px;
 }
 
 .budget-row {

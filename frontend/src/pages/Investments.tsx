@@ -188,43 +188,45 @@ export default function Investments() {
         {holdingsEmpty ? (
           <EmptyState>{holdingsEmpty}</EmptyState>
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Holding</th>
-                <th className="num">Qty</th>
-                <th className="num">Price</th>
-                <th className="num">Value</th>
-                <th className="num">Cost</th>
-                <th className="num">Gain / loss</th>
-              </tr>
-            </thead>
-            <tbody>
-              {holdings.map((h, i) => (
-                <tr key={`${h.account_id}-${h.ticker ?? h.security_name ?? i}`}>
-                  <td>
-                    <span className="account-name">{h.ticker ?? "—"}</span>{" "}
-                    <span className="muted">{h.security_name ?? ""}</span>
-                  </td>
-                  <td className="num">{h.quantity ?? "—"}</td>
-                  <td className="num">
-                    {currency(h.price, h.currency)}
-                    <PriceHint h={h} />
-                  </td>
-                  <td className="num">{currency(h.value, h.currency)}</td>
-                  <td className="num">{currency(h.cost_basis, h.currency)}</td>
-                  <td
-                    className={`num ${h.gain == null ? "" : h.gain >= 0 ? "amt-in" : "amt-out"}`}
-                  >
-                    {h.gain == null ? "—" : signedCurrency(h.gain, h.currency)}
-                    {h.gain_pct != null && (
-                      <div className="cell-hint">{percent(h.gain_pct, true)}</div>
-                    )}
-                  </td>
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Holding</th>
+                  <th className="num">Qty</th>
+                  <th className="num">Price</th>
+                  <th className="num">Value</th>
+                  <th className="num">Cost</th>
+                  <th className="num">Gain / loss</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {holdings.map((h, i) => (
+                  <tr key={`${h.account_id}-${h.ticker ?? h.security_name ?? i}`}>
+                    <td>
+                      <span className="account-name">{h.ticker ?? "—"}</span>{" "}
+                      <span className="muted">{h.security_name ?? ""}</span>
+                    </td>
+                    <td className="num">{h.quantity ?? "—"}</td>
+                    <td className="num">
+                      {currency(h.price, h.currency)}
+                      <PriceHint h={h} />
+                    </td>
+                    <td className="num">{currency(h.value, h.currency)}</td>
+                    <td className="num">{currency(h.cost_basis, h.currency)}</td>
+                    <td
+                      className={`num ${h.gain == null ? "" : h.gain >= 0 ? "amt-in" : "amt-out"}`}
+                    >
+                      {h.gain == null ? "—" : signedCurrency(h.gain, h.currency)}
+                      {h.gain_pct != null && (
+                        <div className="cell-hint">{percent(h.gain_pct, true)}</div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
 
@@ -232,38 +234,40 @@ export default function Investments() {
         {activityEmpty ? (
           <EmptyState>{activityEmpty}</EmptyState>
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Activity</th>
-                <th>Type</th>
-                <th className="num">Qty</th>
-                <th className="num">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {txns.map((t) => {
-                // Plaid: negative = cash credited to the account (e.g. a dividend).
-                const moneyIn = t.amount != null && t.amount < 0;
-                return (
-                  <tr key={t.id}>
-                    <td className="muted">{shortDate(t.date)}</td>
-                    <td>{t.name ?? t.ticker ?? "—"}</td>
-                    <td>
-                      <span className="tag">{t.subtype ?? t.type ?? "—"}</span>
-                    </td>
-                    <td className="num">{t.quantity ?? "—"}</td>
-                    <td
-                      className={`num ${t.amount == null ? "" : moneyIn ? "amt-in" : "amt-out"}`}
-                    >
-                      {t.amount == null ? "—" : `${moneyIn ? "+" : ""}${currency(Math.abs(t.amount), t.currency)}`}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Activity</th>
+                  <th>Type</th>
+                  <th className="num">Qty</th>
+                  <th className="num">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {txns.map((t) => {
+                  // Plaid: negative = cash credited to the account (e.g. a dividend).
+                  const moneyIn = t.amount != null && t.amount < 0;
+                  return (
+                    <tr key={t.id}>
+                      <td className="muted">{shortDate(t.date)}</td>
+                      <td>{t.name ?? t.ticker ?? "—"}</td>
+                      <td>
+                        <span className="tag">{t.subtype ?? t.type ?? "—"}</span>
+                      </td>
+                      <td className="num">{t.quantity ?? "—"}</td>
+                      <td
+                        className={`num ${t.amount == null ? "" : moneyIn ? "amt-in" : "amt-out"}`}
+                      >
+                        {t.amount == null ? "—" : `${moneyIn ? "+" : ""}${currency(Math.abs(t.amount), t.currency)}`}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
     </>

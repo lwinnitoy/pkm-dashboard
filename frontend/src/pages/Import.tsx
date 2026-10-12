@@ -48,40 +48,42 @@ function GapList({ gaps }: { gaps: DateRange[] }) {
 
 function RowTable({ rows }: { rows: ImportRow[] }) {
   return (
-    <table className="table">
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Description</th>
-          <th className="num">Amount</th>
-          <th>Category</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r, i) => (
-          <tr key={`${r.date}-${r.description}-${i}`}>
-            <td>{longDate(r.date)}</td>
-            <td>{r.description}</td>
-            <td className={`num ${r.amount >= 0 ? "amt-out" : "amt-in"}`}>
-              {signedAmount(r.amount)}
-            </td>
-            <td>
-              <span className={r.category === "Transfers" ? "tag status-transfer" : "muted"}>
-                {r.category}
-              </span>
-            </td>
-            <td>
-              <span className={`tag status-${r.status}`}>{r.status}</span>
-              {r.existing_amount != null && (
-                // Signed, so a charge stored as a refund (or vice versa) shows up.
-                <span className="muted"> was {signedAmount(r.existing_amount)}</span>
-              )}
-            </td>
+    <div className="table-wrap">
+      <table className="table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Description</th>
+            <th className="num">Amount</th>
+            <th>Category</th>
+            <th>Status</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={`${r.date}-${r.description}-${i}`}>
+              <td>{longDate(r.date)}</td>
+              <td>{r.description}</td>
+              <td className={`num ${r.amount >= 0 ? "amt-out" : "amt-in"}`}>
+                {signedAmount(r.amount)}
+              </td>
+              <td>
+                <span className={r.category === "Transfers" ? "tag status-transfer" : "muted"}>
+                  {r.category}
+                </span>
+              </td>
+              <td>
+                <span className={`tag status-${r.status}`}>{r.status}</span>
+                {r.existing_amount != null && (
+                  // Signed, so a charge stored as a refund (or vice versa) shows up.
+                  <span className="muted"> was {signedAmount(r.existing_amount)}</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -107,7 +109,16 @@ export default function Import() {
   }, []);
 
   useEffect(() => {
-    void api.importPresets().then(setPresets).catch(() => setPresets([]));
+    void api
+      .importPresets()
+      .then((loaded) => {
+        setPresets(loaded);
+        // The "rbc" default is a guess until the list arrives; keep the choice
+        // only if it's a real preset.
+        const keys = loaded.map((p) => p.key);
+        if (keys.length > 0) setPreset((cur) => (keys.includes(cur) ? cur : keys[0]));
+      })
+      .catch(() => setPresets([]));
     loadStatus();
   }, [loadStatus]);
 
@@ -428,28 +439,30 @@ export default function Import() {
         {batches.length === 0 ? (
           <EmptyState>Nothing imported yet.</EmptyState>
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>File</th>
-                <th>Period</th>
-                <th className="num">Imported</th>
-                <th className="num">Duplicate</th>
-                <th className="num">Conflicting</th>
-              </tr>
-            </thead>
-            <tbody>
-              {batches.map((b) => (
-                <tr key={b.id}>
-                  <td>{b.filename}</td>
-                  <td>{rangeLabel({ start: b.period_start, end: b.period_end })}</td>
-                  <td className="num">{b.rows_imported}</td>
-                  <td className="num">{b.rows_duplicate}</td>
-                  <td className="num">{b.rows_conflicting}</td>
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>File</th>
+                  <th>Period</th>
+                  <th className="num">Imported</th>
+                  <th className="num">Duplicate</th>
+                  <th className="num">Conflicting</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {batches.map((b) => (
+                  <tr key={b.id}>
+                    <td>{b.filename}</td>
+                    <td>{rangeLabel({ start: b.period_start, end: b.period_end })}</td>
+                    <td className="num">{b.rows_imported}</td>
+                    <td className="num">{b.rows_duplicate}</td>
+                    <td className="num">{b.rows_conflicting}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
     </>

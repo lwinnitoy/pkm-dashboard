@@ -22,6 +22,7 @@ export default function Topbar() {
             <button
               key={r.days}
               className={range === r.days ? "active" : ""}
+              aria-pressed={range === r.days}
               onClick={() => setRange(r.days)}
             >
               {r.label}

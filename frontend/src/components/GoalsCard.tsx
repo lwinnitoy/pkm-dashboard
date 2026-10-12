@@ -46,6 +46,19 @@ const EMPTY: GoalInput = {
   monthly_contribution: 1000,
 };
 
+const EMPTY_DRAFTS = {
+  target_amount: String(EMPTY.target_amount),
+  expected_annual_return: String(EMPTY.expected_annual_return * 100),
+  monthly_contribution: String(EMPTY.monthly_contribution),
+};
+
+/** A typed number field, or null when it's blank or not a number. 0 is valid. */
+function parseField(raw: string): number | null {
+  if (raw.trim() === "") return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
 export default function GoalsCard({
   goals,
   onCreate,
@@ -56,14 +69,30 @@ export default function GoalsCard({
   onDelete: (id: number) => Promise<void>;
 }) {
   const [form, setForm] = useState<GoalInput>(EMPTY);
+  // The number fields hold what's typed, so a cleared field stays empty rather
+  // than snapping to 0; they become numbers on submit.
+  const [drafts, setDrafts] = useState(EMPTY_DRAFTS);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await onCreate(form);
+      const target = parseField(drafts.target_amount);
+      const returnPct = parseField(drafts.expected_annual_return);
+      const contribution = parseField(drafts.monthly_contribution);
+      if (target == null || returnPct == null || contribution == null) {
+        setError("Fill in the target, return and contribution.");
+        return;
+      }
+      await onCreate({
+        ...form,
+        target_amount: target,
+        expected_annual_return: returnPct / 100, // typed as a percent, stored as a fraction
+        monthly_contribution: contribution,
+      });
       setForm(EMPTY);
+      setDrafts(EMPTY_DRAFTS);
       setShowForm(false);
       setError(null);
     } catch (err) {
@@ -110,8 +139,8 @@ export default function GoalsCard({
             Target $
             <input
               type="number"
-              value={form.target_amount}
-              onChange={(e) => setForm({ ...form, target_amount: Number(e.target.value) })}
+              value={drafts.target_amount}
+              onChange={(e) => setDrafts({ ...drafts, target_amount: e.target.value })}
             />
           </label>
           <label>
@@ -129,20 +158,16 @@ export default function GoalsCard({
             <input
               type="number"
               step="0.1"
-              value={Math.round(form.expected_annual_return * 10000) / 100}
-              onChange={(e) =>
-                setForm({ ...form, expected_annual_return: Number(e.target.value) / 100 })
-              }
+              value={drafts.expected_annual_return}
+              onChange={(e) => setDrafts({ ...drafts, expected_annual_return: e.target.value })}
             />
           </label>
           <label>
             Contribution $/mo
             <input
               type="number"
-              value={form.monthly_contribution}
-              onChange={(e) =>
-                setForm({ ...form, monthly_contribution: Number(e.target.value) })
-              }
+              value={drafts.monthly_contribution}
+              onChange={(e) => setDrafts({ ...drafts, monthly_contribution: e.target.value })}
             />
           </label>
           <button type="submit" className="btn">

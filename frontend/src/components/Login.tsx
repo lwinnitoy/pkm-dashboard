@@ -31,12 +31,13 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
           value={password}
           autoFocus
           placeholder="Password"
+          aria-label="Password"
           onChange={(e) => setPassword(e.target.value)}
         />
         <button className="btn" type="submit" disabled={busy || !password}>
           {busy ? "Signing in…" : "Sign in"}
         </button>
-        {error && <div className="error">{error}</div>}
+        {error && <div className="error" role="alert">{error}</div>}
       </form>
     </div>
   );

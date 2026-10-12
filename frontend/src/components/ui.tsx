@@ -67,7 +67,7 @@ export function Delta({
   const arrow = value > 0 ? "▲" : value < 0 ? "▼" : "•";
   return (
     <span className={`delta ${dir}${expense ? " expense" : ""}`}>
-      {arrow} {Math.abs(value).toFixed(1)}%{label ? ` ${label}` : ""}
+      <span aria-hidden="true">{arrow}</span> {Math.abs(value).toFixed(1)}%{label ? ` ${label}` : ""}
     </span>
   );
 }

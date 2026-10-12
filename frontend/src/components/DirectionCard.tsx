@@ -47,9 +47,8 @@ function loadSaved(): { monthly?: string; years?: string } {
 export default function DirectionCard() {
   const [data, setData] = useState<InvestmentDirection | null>(null);
   const [failed, setFailed] = useState(false);
-  const saved = loadSaved();
-  const [monthly, setMonthly] = useState<string | undefined>(saved.monthly);
-  const [years, setYears] = useState(saved.years ?? "30");
+  const [monthly, setMonthly] = useState<string | undefined>(() => loadSaved().monthly);
+  const [years, setYears] = useState<string>(() => loadSaved().years ?? "30");
 
   useEffect(() => {
     api.investmentDirection().then(setData).catch(() => setFailed(true));
