@@ -14,7 +14,7 @@ COPY frontend/ ./
 ENV VITE_API_BASE=""
 RUN npm run build
 
-FROM python:3.11-slim
+FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
@@ -38,7 +38,7 @@ RUN apt-get update \
 
 WORKDIR /srv
 COPY backend/requirements.txt backend/requirements.txt
-RUN pip install -r backend/requirements.txt
+RUN pip install --require-hashes -r backend/requirements.txt
 COPY backend/ backend/
 COPY deploy/cloudrun/job.sh deploy/cloudrun/job.sh
 COPY --from=ui /src/frontend/dist frontend/dist

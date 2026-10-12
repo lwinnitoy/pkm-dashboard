@@ -29,14 +29,14 @@ It runs on your own Google Cloud project or your own machine, so the data stays 
 
 ## Quick start (local, Plaid Sandbox)
 
-Prerequisites: Python 3.11+, Node 20.19+ (or 22.12+), and a free Plaid account (the
+Prerequisites: Python 3.12+, Node 20.19+ (or 22.12+), and a free Plaid account (the
 `client_id` and Sandbox `secret` are under **Team Settings → Keys** at
 [dashboard.plaid.com](https://dashboard.plaid.com)).
 
 ```bash
 # Backend: http://localhost:8000 (API docs at /docs)
 python3 -m venv .venv
-.venv/bin/pip install -r backend/requirements.txt
+.venv/bin/pip install -r backend/requirements-dev.txt
 cd backend
 cp .env.example .env      # set PLAID_CLIENT_ID, PLAID_SECRET, SECRET_ENCRYPTION_KEY
 ../.venv/bin/uvicorn app.main:app --reload

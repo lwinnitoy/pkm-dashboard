@@ -11,7 +11,7 @@ retirement-goal projections. The scope is personal finance only; there are no pl
 non-finance modules. (The repo and some identifiers still say `pkm`, from an earlier,
 broader plan.)
 
-- **Backend:** Python 3.11+ / FastAPI + SQLAlchemy 2.0 + Alembic (SQLite for local dev, Postgres via `psycopg` in the cloud), `plaid-python`, APScheduler
+- **Backend:** Python 3.12+ / FastAPI + SQLAlchemy 2.0 + Alembic (SQLite for local dev, Postgres via `psycopg` in the cloud), `plaid-python`, APScheduler
 - **Frontend:** React 19 + TypeScript (Vite), `react-plaid-link`, `recharts`
 
 ## Commands
@@ -19,10 +19,16 @@ broader plan.)
 ### Backend
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install -r backend/requirements.txt
+.venv/bin/pip install -r backend/requirements-dev.txt
 cd backend && cp .env.example .env      # set PLAID_CLIENT_ID / PLAID_SECRET / SECRET_ENCRYPTION_KEY
 ../.venv/bin/uvicorn app.main:app --reload   # http://localhost:8000, docs at /docs
 ```
+
+Dependencies are locked with hashes: edit `backend/requirements.in` (runtime) or
+`requirements-dev.in` (adds pytest/httpx), then regenerate **both** locks from `backend/`
+with `../.venv/bin/pip-compile --generate-hashes --allow-unsafe --strip-extras
+--output-file=requirements.txt requirements.in` (and the same for `requirements-dev`).
+The images install `requirements.txt` with `--require-hashes`.
 
 `SECRET_ENCRYPTION_KEY` is required (Fernet). Generate one with:
 `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
