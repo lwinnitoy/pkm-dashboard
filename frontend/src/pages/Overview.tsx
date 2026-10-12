@@ -68,10 +68,10 @@ export default function Overview() {
 
       <div className="grid grid-3">
         <Card>
-          <MetricTile label="Income" value={currency(income)} foot="money in, this range" />
+          <MetricTile label="Income" value={currency(income)} foot="earned, this range (not transfers)" />
         </Card>
         <Card>
-          <MetricTile label="Spending" value={currency(spending)} foot="money out, this range" />
+          <MetricTile label="Spending" value={currency(spending)} foot="spent, net of refunds" />
         </Card>
         <Card>
           <MetricTile

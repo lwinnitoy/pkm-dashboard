@@ -4,12 +4,31 @@ import { api, errorText } from "../api/client";
 
 interface Props {
   onLinked: () => void;
+  /** Repair this existing login (Plaid update mode) instead of linking a new bank. */
+  itemId?: number;
+  label?: string;
 }
 
-// react-plaid-link stashes the link token so we can resume after an OAuth bank
+// The Link session in progress, kept so it can resume after an OAuth bank
 // redirect, which reloads the app at the registered redirect URI with
-// ?oauth_state_id in the URL.
-const TOKEN_KEY = "plaid_link_token";
+// ?oauth_state_id in the URL. Written when Link opens (not on mount), because
+// the Accounts page can hold several of these buttons at once.
+const STORE_KEY = "plaid_link_token";
+
+interface Pending {
+  token: string;
+  itemId: number | null;
+}
+
+function readPending(): Pending | null {
+  const raw = localStorage.getItem(STORE_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as Pending;
+  } catch {
+    return { token: raw, itemId: null }; // stored by an older build: a plain token
+  }
+}
 
 // The URL the bank returned to, captured at page load: AppShell then forwards the
 // return to /accounts, but Link has to be handed the address Plaid redirected to.
@@ -19,38 +38,41 @@ let oauthReturnUri: string | null =
     ? window.location.href
     : null;
 
-export default function PlaidLinkButton({ onLinked }: Props) {
-  const [receivedRedirectUri] = useState(oauthReturnUri);
-  // On an OAuth return, reuse the token created before the redirect.
-  const [linkToken, setLinkToken] = useState<string | null>(
-    receivedRedirectUri ? localStorage.getItem(TOKEN_KEY) : null,
-  );
+export default function PlaidLinkButton({ onLinked, itemId, label }: Props) {
+  const mode = itemId ?? null;
+  // Resume only in the button that started the flow (same new-link/update target).
+  const [resume] = useState(() => {
+    if (!oauthReturnUri) return null;
+    const pending = readPending();
+    return pending && pending.itemId === mode ? { uri: oauthReturnUri, token: pending.token } : null;
+  });
+  const [linkToken, setLinkToken] = useState<string | null>(resume?.token ?? null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (receivedRedirectUri) return; // mid-OAuth: keep the existing token
+    if (resume) return; // mid-OAuth: keep the token Link started with
     api
-      .createLinkToken()
-      .then((r) => {
-        setLinkToken(r.link_token);
-        localStorage.setItem(TOKEN_KEY, r.link_token);
-      })
+      .createLinkToken(mode ?? undefined)
+      .then((r) => setLinkToken(r.link_token))
       .catch((e) => setError(errorText(e)));
-  }, [receivedRedirectUri]);
+  }, [resume, mode]);
 
   const onSuccess = useCallback<PlaidLinkOnSuccess>(
     async (public_token, metadata) => {
-      if (!public_token) return;
       try {
-        // institution_id lets the backend recognize a reconnect of a bank you
-        // already linked, instead of duplicating all of its accounts.
-        await api.exchangeToken(
-          public_token,
-          metadata.institution?.name ?? undefined,
-          metadata.institution?.institution_id ?? undefined,
-        );
-        localStorage.removeItem(TOKEN_KEY);
-        if (receivedRedirectUri) {
+        // Update mode repairs the existing Item in place: nothing to exchange.
+        if (mode == null) {
+          if (!public_token) return;
+          // institution_id lets the backend recognize a reconnect of a bank you
+          // already linked, instead of duplicating all of its accounts.
+          await api.exchangeToken(
+            public_token,
+            metadata.institution?.name ?? undefined,
+            metadata.institution?.institution_id ?? undefined,
+          );
+        }
+        localStorage.removeItem(STORE_KEY);
+        if (resume) {
           oauthReturnUri = null;
           // Drop ?oauth_state_id so a refresh doesn't re-trigger Link.
           window.history.replaceState({}, "", window.location.pathname);
@@ -60,25 +82,35 @@ export default function PlaidLinkButton({ onLinked }: Props) {
         setError(errorText(e));
       }
     },
-    [onLinked, receivedRedirectUri],
+    [onLinked, mode, resume],
   );
 
   const { open, ready } = usePlaidLink({
     token: linkToken,
     onSuccess,
-    ...(receivedRedirectUri ? { receivedRedirectUri } : {}),
+    ...(resume ? { receivedRedirectUri: resume.uri } : {}),
   });
 
   // Automatically re-open Link when returning from the bank's OAuth page.
   useEffect(() => {
-    if (receivedRedirectUri && ready) open();
-  }, [receivedRedirectUri, ready, open]);
+    if (resume && ready) open();
+  }, [resume, ready, open]);
 
   if (error) return <span className="error">Link error: {error}</span>;
 
   return (
-    <button className="btn-ghost btn" disabled={!ready || !linkToken} onClick={() => open()}>
-      + Connect a bank
+    <button
+      className="btn-ghost btn"
+      disabled={!ready || !linkToken}
+      onClick={() => {
+        if (linkToken) {
+          const pending: Pending = { token: linkToken, itemId: mode };
+          localStorage.setItem(STORE_KEY, JSON.stringify(pending));
+        }
+        open();
+      }}
+    >
+      {label ?? (mode == null ? "+ Connect a bank" : "Reconnect")}
     </button>
   );
 }

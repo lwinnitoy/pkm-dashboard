@@ -210,7 +210,7 @@ export default function GoalsCard({
                           axisLine={false}
                         />
                         <YAxis
-                          tickFormatter={currencyCompact}
+                          tickFormatter={(v: number) => currencyCompact(v)}
                           tick={{ fontSize: 11 }}
                           tickLine={false}
                           axisLine={false}

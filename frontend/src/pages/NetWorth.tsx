@@ -20,7 +20,7 @@ function AccountList({ accounts, loading }: { accounts: Account[]; loading: bool
             <div className="account-name">{a.name ?? "Account"}</div>
             <div className="account-meta">{a.subtype ?? a.type ?? ""}</div>
           </div>
-          <div>{currency(a.current_balance)}</div>
+          <div>{currency(a.current_balance, a.currency)}</div>
         </div>
       ))}
     </div>

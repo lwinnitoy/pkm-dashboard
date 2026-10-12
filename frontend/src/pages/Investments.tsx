@@ -6,8 +6,8 @@ import { useFinance } from "../data/financeContext";
 import { currency, percent, shortDate } from "../lib/format";
 
 /** A gain reads as a change, so it always carries its sign: +$12.30 / -$12.30. */
-function signedCurrency(n: number): string {
-  return `${n >= 0 ? "+" : ""}${currency(n)}`;
+function signedCurrency(n: number, code?: string | null): string {
+  return `${n >= 0 ? "+" : ""}${currency(n, code)}`;
 }
 
 /** A list fetched by this page: null while loading, or why it failed. */
@@ -208,15 +208,15 @@ export default function Investments() {
                   </td>
                   <td className="num">{h.quantity ?? "—"}</td>
                   <td className="num">
-                    {currency(h.price)}
+                    {currency(h.price, h.currency)}
                     <PriceHint h={h} />
                   </td>
-                  <td className="num">{currency(h.value)}</td>
-                  <td className="num">{currency(h.cost_basis)}</td>
+                  <td className="num">{currency(h.value, h.currency)}</td>
+                  <td className="num">{currency(h.cost_basis, h.currency)}</td>
                   <td
                     className={`num ${h.gain == null ? "" : h.gain >= 0 ? "amt-in" : "amt-out"}`}
                   >
-                    {h.gain == null ? "—" : signedCurrency(h.gain)}
+                    {h.gain == null ? "—" : signedCurrency(h.gain, h.currency)}
                     {h.gain_pct != null && (
                       <div className="cell-hint">{percent(h.gain_pct, true)}</div>
                     )}
@@ -257,7 +257,7 @@ export default function Investments() {
                     <td
                       className={`num ${t.amount == null ? "" : moneyIn ? "amt-in" : "amt-out"}`}
                     >
-                      {t.amount == null ? "—" : `${moneyIn ? "+" : ""}${currency(Math.abs(t.amount))}`}
+                      {t.amount == null ? "—" : `${moneyIn ? "+" : ""}${currency(Math.abs(t.amount), t.currency)}`}
                     </td>
                   </tr>
                 );

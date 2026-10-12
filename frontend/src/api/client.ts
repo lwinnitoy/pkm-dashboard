@@ -50,6 +50,10 @@ export interface Account {
   source: string;
   mask: string | null;
   institution_name: string | null;
+  // The linked login this account belongs to, and why it last failed to sync
+  // (e.g. "ITEM_LOGIN_REQUIRED"); null for manual accounts or a healthy login.
+  plaid_item_id: number | null;
+  item_error: string | null;
   // Manual accounts: the date the entered balance was true on; imports after it
   // roll the balance forward. Null for Plaid accounts.
   balance_anchor_date: string | null;
@@ -249,6 +253,7 @@ export interface AccountCoverage {
   account_id: number;
   account_name: string | null;
   account_type: string | null;
+  account_subtype: string | null;
   source: string;
   covered: DateRange[];
   gaps: DateRange[];
@@ -382,14 +387,24 @@ export const api = {
       body: JSON.stringify({ password }),
     });
     if (!res.ok) {
-      throw new Error(res.status === 401 ? "Incorrect password" : `Login failed (${res.status})`);
+      if (res.status === 401) throw new Error("Incorrect password");
+      if (res.status === 429) {
+        const minutes = Math.ceil(Number(res.headers.get("Retry-After") ?? 60) / 60);
+        throw new Error(`Too many wrong passwords. Try again in ${minutes} min.`);
+      }
+      throw new Error(`Login failed (${res.status})`);
     }
     const { token } = (await res.json()) as { token: string };
     setToken(token);
   },
 
-  createLinkToken: () =>
-    req<{ link_token: string }>("/api/plaid/create-link-token", { method: "POST" }),
+  /** A token for linking a new bank, or with `itemId`, for repairing that login
+   * in place (Plaid update mode). */
+  createLinkToken: (itemId?: number) =>
+    req<{ link_token: string }>("/api/plaid/create-link-token", {
+      method: "POST",
+      ...(itemId != null ? { body: JSON.stringify({ item_id: itemId }) } : {}),
+    }),
 
   exchangeToken: (
     public_token: string,

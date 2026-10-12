@@ -70,7 +70,7 @@ export default function TransactionsTable({
               </td>
               <td className={`num ${income ? "amt-in" : "amt-out"}`}>
                 {income ? "+" : ""}
-                {currency(Math.abs(t.amount))}
+                {currency(Math.abs(t.amount), t.currency)}
               </td>
             </tr>
           );

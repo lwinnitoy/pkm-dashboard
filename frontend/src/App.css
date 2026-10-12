@@ -476,6 +476,10 @@
   font-size: 0.82rem;
   color: var(--text-muted);
 }
+.chip-warn {
+  color: var(--warning);
+  font-weight: 600;
+}
 
 /* ============================================================
    Tables

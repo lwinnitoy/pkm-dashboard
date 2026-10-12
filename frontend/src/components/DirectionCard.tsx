@@ -158,7 +158,7 @@ export default function DirectionCard() {
             <CartesianGrid stroke={CHART.grid} vertical={false} />
             <XAxis dataKey="year" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
             <YAxis
-              tickFormatter={currencyCompact}
+              tickFormatter={(v: number) => currencyCompact(v)}
               tick={{ fontSize: 11 }}
               tickLine={false}
               axisLine={false}

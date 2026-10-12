@@ -381,8 +381,13 @@ export default function Import() {
                     Kind
                     <select
                       value={
-                        ACCOUNT_KINDS.find((k) => k.type === c.account_type)?.key ??
-                        "chequing"
+                        // Type alone can't tell Savings from Chequing (both
+                        // "depository"), so match the subtype first.
+                        (
+                          ACCOUNT_KINDS.find(
+                            (k) => k.type === c.account_type && k.subtype === c.account_subtype,
+                          ) ?? ACCOUNT_KINDS.find((k) => k.type === c.account_type)
+                        )?.key ?? "chequing"
                       }
                       onChange={async (e) => {
                         const kind = ACCOUNT_KINDS.find((k) => k.key === e.target.value);

@@ -65,7 +65,7 @@ export default function SpendingTrendChart({
             minTickGap={20}
           />
           <YAxis
-            tickFormatter={currencyCompact}
+            tickFormatter={(v: number) => currencyCompact(v)}
             tick={{ fontSize: 11 }}
             tickLine={false}
             axisLine={false}
