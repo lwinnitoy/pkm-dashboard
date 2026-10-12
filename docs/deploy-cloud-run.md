@@ -6,8 +6,8 @@ The chosen hosting shape (option 1 in [hosting-options.md](hosting-options.md)):
 |---|---|---|
 | App (API + UI) | Cloud Run service, one container ([Dockerfile](../Dockerfile)) | Scales to zero; free tier covers a single user |
 | Login | Identity-Aware Proxy (IAP) on the service | Google sign-in in front of every request, from any device. `APP_PASSWORD` stays as a second lock |
-| Database | Neon Postgres (free) | Wakes on connect, never needs a manual restore. Same engine as Databricks Lakebase |
-| Daily sync + backup | Cloud Run Job ([job.sh](../deploy/cloudrun/job.sh)) run by Cloud Scheduler | No outbound restrictions for Plaid; a `pg_dump` goes to Cloud Storage every day |
+| Database | Neon Postgres (free) | Wakes on connect, never needs a manual restore |
+| Daily backup + sync | Cloud Run Job ([job.sh](../deploy/cloudrun/job.sh)) run by Cloud Scheduler | No outbound restrictions for Plaid; a `pg_dump` goes to Cloud Storage every day |
 | Secrets | Secret Manager | Never in the image or the repo |
 
 Expected cost: about $0 inside the free tiers (Cloud Run, Cloud Scheduler's 3 free
@@ -23,11 +23,16 @@ export PROJECT_ID=pkm-$(whoami)          # must be globally unique; change if ta
 export REGION=us-west1                   # Oregon: in GCS's free regions, next to Neon's us-west-2
 export SERVICE=pkm
 export JOB=pkm-daily
-export IMAGE=$REGION-docker.pkg.dev/$PROJECT_ID/pkm/app:latest
+export IMAGE=$REGION-docker.pkg.dev/$PROJECT_ID/pkm/app:initial   # first setup only; see below
 export BUCKET=$PROJECT_ID-backups
 export YOU=you@gmail.com                 # the Google account allowed to sign in
 export RUN_SA=pkm-run@$PROJECT_ID.iam.gserviceaccount.com
 ```
+
+`$IMAGE` is only for this first setup. After it, `deploy/cloudrun/deploy.sh` tags every
+image with its commit hash and points both the service and the job at it, so don't
+reuse `$IMAGE` later to recreate the job; take the current image from
+`gcloud run services describe $SERVICE --region $REGION --format='value(spec.template.spec.containers[0].image)'`.
 
 ## 1. Tools
 
@@ -58,42 +63,28 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
   --member=serviceAccount:$RUN_SA --role=roles/secretmanager.secretAccessor
 ```
 
-## 3. Neon, and moving the data off Replit
+## 3. Neon
 
-1. At [neon.com](https://neon.com), create a project: Postgres 17, region **AWS US West 2
-   (Oregon)**. Copy the **direct** connection string (host without `-pooler`). The
-   pooled one runs PgBouncer in transaction mode, which doesn't suit the app's driver.
-2. In Replit, copy the **production** database's connection string (the published
-   app's database, not the development one).
-3. Build the image locally. It carries `pg_dump`/`pg_restore` new enough for both
-   databases, so you don't need to install Postgres tools:
+At [neon.com](https://neon.com), create a project: Postgres 17, region **AWS US West 2
+(Oregon)**. Copy the **direct** connection string (host without `-pooler`) and
+`export NEON_URL='postgresql://…'`. The pooled one runs PgBouncer in transaction mode,
+which doesn't suit the app's driver.
 
-```bash
-docker build -t pkm-local .
-export REPLIT_URL='postgresql://…'   # from Replit, production
-export NEON_URL='postgresql://…'     # from Neon, direct
-docker run --rm -v "$PWD":/work pkm-local \
-  pg_dump --no-owner --no-privileges -Fc -f /work/replit.dump "$REPLIT_URL"
-docker run --rm -v "$PWD":/work pkm-local \
-  pg_restore --no-owner --no-privileges -d "$NEON_URL" /work/replit.dump
-docker run --rm -e DATABASE_URL="$NEON_URL" -e SECRET_ENCRYPTION_KEY=x pkm-local alembic current
-```
-
-The last command should print `e8f3c6d5b2a1 (head)`. If it prints an older revision,
-run the same command with `alembic upgrade head`.
-
-`replit.dump` holds every transaction and the encrypted Plaid tokens. Git ignores
-`*.dump`, but delete the file once the move is done.
+A new, empty database needs nothing else: the container runs `alembic upgrade head`
+on start. To bring existing data along, see
+[Appendix: moving an existing database](#appendix-moving-an-existing-database).
 
 ## 4. Secrets
 
-**`SECRET_ENCRYPTION_KEY` must be the exact value Replit uses.** The stored Plaid
-tokens were encrypted with it; any other key makes every bank need re-linking. Use a
-**new** `APP_PASSWORD` (the old one has been shared in a chat).
+**`SECRET_ENCRYPTION_KEY` encrypts the stored Plaid tokens.** For a fresh database,
+generate one (`python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`).
+For a moved database, it must be the exact key the old host used: any other key makes
+every bank need re-linking. Keep a copy somewhere outside Google Cloud too, because a
+backup can't be used without it. Pick a long `APP_PASSWORD`.
 
 ```bash
 printf '%s' "$NEON_URL"            | gcloud secrets create pkm-database-url    --data-file=-
-printf '%s' 'KEY-FROM-REPLIT'      | gcloud secrets create pkm-encryption-key  --data-file=-
+printf '%s' 'FERNET-KEY'           | gcloud secrets create pkm-encryption-key  --data-file=-
 printf '%s' 'NEW-LONG-PASSPHRASE'  | gcloud secrets create pkm-app-password    --data-file=-
 printf '%s' 'PLAID_CLIENT_ID'      | gcloud secrets create pkm-plaid-client-id --data-file=-
 printf '%s' 'PLAID_PRODUCTION_KEY' | gcloud secrets create pkm-plaid-secret    --data-file=-
@@ -170,7 +161,8 @@ sign-in, then the app's own password screen.
 Plaid OAuth banks redirect back to `PLAID_REDIRECT_URI`, which must match the
 dashboard entry exactly.
 1. In the Plaid dashboard (**Team Settings → API → Allowed redirect URIs**), add the
-   service URL with the same path you use on Replit (currently the site root, `/`).
+   service URL's site root (`https://…run.app/`). The app forwards an OAuth return
+   that lands there to the Accounts page, which finishes the link.
 2. Set the same value as `PLAID_REDIRECT_URI` in `deploy/cloudrun/env.yaml`.
 3. Apply it:
 
@@ -227,16 +219,14 @@ Two gotchas here, both hit on the first real setup:
 Check it end to end with `gcloud scheduler jobs run $JOB --location $REGION`, then
 look for a new execution in `gcloud run jobs executions list --job $JOB --region $REGION`.
 
-The job syncs first and backs up even if the sync fails; either failure marks the run
-failed. To get an email when that happens, create an alert policy in **Monitoring →
+The job backs up first, then syncs, so neither a failed nor a hung Plaid call can
+cost a day's backup; either failure marks the run failed. To get an email when that happens, create an alert policy in **Monitoring →
 Alerting** on the Cloud Run job's failed executions.
 
-## 10. Cut over
+## 10. Check it
 
-1. On the new URL, on your phone too: sign in, press **Sync now**, and check that
-   Accounts, Investments and Net Worth match Replit.
-2. Stop the Replit deployment. Keep Replit's database for a week as a fallback,
-   then delete it, along with `replit.dump`.
+On the service URL, on your phone too: sign in, press **Sync now**, and check that
+Accounts, Investments and Net Worth look right.
 
 ## Day to day
 
@@ -265,11 +255,47 @@ New migrations run when the service starts. Test them against a Neon **branch** 
 branch the database in the Neon console, then run
 `docker run --rm -e DATABASE_URL='<branch url>' -e SECRET_ENCRYPTION_KEY=x pkm-local alembic upgrade head`.
 
-**Restoring a backup** (into a fresh Neon branch or database, not over live data):
+**Restoring a backup.** Restore into a new, **empty** database, never over live data
+and never into a Neon branch: a branch is a copy of the live data, so the dump's
+`CREATE TABLE`s fail on tables that already exist. In the Neon console create a new
+database (or a new project), copy its **direct** connection string, then:
 
 ```bash
+export TARGET_URL='postgresql://…'   # plain postgresql://, not the app's +psycopg form
 gcloud storage cp gs://$BUCKET/pkm-2026-10-04.sql.gz .
-gunzip -c pkm-2026-10-04.sql.gz | docker run --rm -i pkm-local psql "$TARGET_URL"
+gunzip -c pkm-2026-10-04.sql.gz \
+  | docker run --rm -i pkm-local psql -v ON_ERROR_STOP=1 --single-transaction "$TARGET_URL"
+docker run --rm pkm-local psql "$TARGET_URL" -c \
+  "select (select count(*) from transactions) as txns, (select count(*) from balance_snapshots) as snapshots, (select max(date) from balance_snapshots) as last_snapshot"
 ```
 
+`ON_ERROR_STOP` and `--single-transaction` make a failed restore fail loudly and
+leave nothing behind, instead of exiting 0 halfway through. Compare the counts with
+the live app. To switch over, point the `pkm-database-url` secret at the new
+database and redeploy. The Plaid tokens in the dump only decrypt with the same
+`SECRET_ENCRYPTION_KEY`. Balance snapshots can't be re-fetched from Plaid, so
+practise this once before you need it.
+
 **Logs:** Cloud Run → `pkm` (requests) or `pkm-daily` (job runs) → **Logs**.
+
+## Appendix: moving an existing database
+
+This is how the data moved off Replit in October 2026, and works from any Postgres
+host. The image carries `pg_dump`/`pg_restore` new enough for both ends, so no local
+Postgres tools are needed:
+
+```bash
+docker build -t pkm-local .
+export OLD_URL='postgresql://…'   # the old host's production database
+docker run --rm -v "$PWD":/work pkm-local \
+  pg_dump --no-owner --no-privileges -Fc -f /work/move.dump "$OLD_URL"
+docker run --rm -v "$PWD":/work pkm-local \
+  pg_restore --no-owner --no-privileges -d "$NEON_URL" /work/move.dump
+docker run --rm -e DATABASE_URL="$NEON_URL" -e SECRET_ENCRYPTION_KEY=x pkm-local alembic current
+```
+
+The last command prints the database's revision. If it isn't `(head)`, run the same
+command with `alembic upgrade head`. Use the old host's `SECRET_ENCRYPTION_KEY` in
+step 4. `move.dump` holds every transaction and the encrypted Plaid tokens. Git
+ignores `*.dump`, but delete the file once the move is done, and keep the old
+database for a week as a fallback.

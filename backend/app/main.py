@@ -65,7 +65,7 @@ async def lifespan(app: FastAPI):
         shutdown_scheduler()
 
 
-app = FastAPI(title="PKM Platform API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Ledger API", version="0.1.0", lifespan=lifespan)
 
 settings = get_settings()
 app.add_middleware(
@@ -93,18 +93,26 @@ def health():
     return {"status": "ok", "plaid_env": settings.plaid_env}
 
 
-# Serve the built frontend for single-port deploys (e.g. Replit). No-op in local
-# dev, where Vite serves the UI and frontend/dist doesn't exist. Registered after
-# the API routers so /api/* and /health always take precedence.
-_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
-if _DIST.is_dir():
-    app.mount("/assets", StaticFiles(directory=_DIST / "assets"), name="assets")
+def mount_frontend(app: FastAPI, dist: Path) -> None:
+    """Serve a built frontend from `dist`: its files as-is, any other path as the
+    SPA's index.html. Register after the API routers so /api/* and /health win."""
+    root = dist.resolve()
+    app.mount("/assets", StaticFiles(directory=root / "assets"), name="assets")
 
     @app.get("/{full_path:path}", include_in_schema=False)
     def spa(full_path: str):
         if full_path.startswith("api/") or full_path == "health":
             raise HTTPException(status_code=404)
-        candidate = _DIST / full_path
-        if full_path and candidate.is_file():
+        # The path arrives URL-decoded with any "../" intact (/..%2F..%2F.env), and
+        # this route sits outside auth, so only serve files that resolve inside dist.
+        candidate = (root / full_path).resolve()
+        if full_path and candidate.is_relative_to(root) and candidate.is_file():
             return FileResponse(candidate)  # favicon, icons, etc.
-        return FileResponse(_DIST / "index.html")  # SPA fallback
+        return FileResponse(root / "index.html")  # SPA fallback
+
+
+# Single-port deploys (the Cloud Run image) serve the built frontend from here. A
+# no-op in local dev, where Vite serves the UI and frontend/dist doesn't exist.
+_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+if _DIST.is_dir():
+    mount_frontend(app, _DIST)

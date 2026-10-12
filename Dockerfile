@@ -5,7 +5,7 @@
 # the daily Cloud Run Job (deploy/cloudrun/job.sh). The docker-compose stack keeps
 # its separate backend/ and frontend/ images.
 
-FROM node:20-alpine AS ui
+FROM node:22-alpine AS ui
 WORKDIR /src/frontend
 COPY frontend/package*.json ./
 RUN npm ci
@@ -44,6 +44,6 @@ COPY deploy/cloudrun/job.sh deploy/cloudrun/job.sh
 COPY --from=ui /src/frontend/dist frontend/dist
 
 WORKDIR /srv/backend
-# Migrations run on start, as on Replit. Cloud Run is deployed with
+# Migrations run on start. Cloud Run is deployed with
 # --max-instances=1, so two instances never race the same upgrade.
 CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
