@@ -48,7 +48,12 @@ def update_budget(budget_id: int, payload: BudgetUpdate, db: Session = Depends(g
     budget = db.get(Budget, budget_id)
     if budget is None:
         raise HTTPException(status_code=404, detail="Budget not found")
-    for key, val in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    category = changes.get("category")
+    if category and category != budget.category:
+        if db.query(Budget).filter_by(category=category).first() is not None:
+            raise HTTPException(status_code=409, detail=f"{category} already has a budget")
+    for key, val in changes.items():
         setattr(budget, key, val)
     db.commit()
     db.refresh(budget)

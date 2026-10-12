@@ -325,3 +325,16 @@ def test_unparseable_upload_is_a_422_not_a_500(client, db_session):
         data={"account_id": account.id, "preset": "rbc"},
     )
     assert response.status_code == 422
+
+
+def test_a_zero_debit_beside_a_credit_imports_the_credit():
+    """Banks that fill both columns write 0.00 on the unused side."""
+    data = (
+        b"Date,Description,Debit,Credit\n"
+        b"2026-09-02,PAYROLL,0.00,50.00\n"
+        b"2026-09-03,GROCER,12.34,0.00\n"
+        b"2026-09-04,CREDIT ONLY,,7.00\n"
+    )
+    rows = parse(data, "g.csv", PRESETS["generic"])
+
+    assert [r.amount for r in rows] == [-50.00, 12.34, -7.00]

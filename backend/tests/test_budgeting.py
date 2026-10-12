@@ -97,3 +97,24 @@ def test_budget_status_isolates_other_months(client, db_session):
 
 def test_budget_status_rejects_bad_month(client, db_session):
     assert client.get("/api/finance/budgets/status?month=nope").status_code == 400
+
+
+def test_renaming_a_budget_onto_another_budgets_category_is_a_conflict(client):
+    client.post("/api/finance/budgets", json={"category": "Dining", "monthly_limit": 100})
+    groceries = client.post(
+        "/api/finance/budgets", json={"category": "Groceries", "monthly_limit": 300}
+    ).json()
+
+    resp = client.patch(f"/api/finance/budgets/{groceries['id']}", json={"category": "Dining"})
+
+    assert resp.status_code == 409
+    renamed = client.patch(f"/api/finance/budgets/{groceries['id']}", json={"category": "Food"})
+    assert renamed.status_code == 200 and renamed.json()["category"] == "Food"
+
+
+def test_a_goal_return_of_minus_100_percent_is_rejected(client):
+    goal = {"name": "Retire", "target_amount": 1_000_000, "target_date": "2060-01-01"}
+
+    assert client.post("/api/finance/goals", json={**goal, "expected_annual_return": -1.0}).status_code == 422
+    assert client.post("/api/finance/goals", json={**goal, "expected_annual_return": -0.2}).status_code == 201
+    assert client.get("/api/finance/goals").status_code == 200

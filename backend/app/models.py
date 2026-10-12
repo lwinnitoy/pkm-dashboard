@@ -95,9 +95,11 @@ class Transaction(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"))
-    # Exactly one identity is set, per `source`: Plaid rows carry a Plaid id, manual
-    # rows carry a fingerprint. Both are unique, so re-importing an overlapping
-    # statement period is idempotent at the DB level, not just in the reconciler.
+    # One identity per `source`: Plaid rows carry a Plaid id, manual rows carry a
+    # fingerprint. Both are unique, so re-importing an overlapping statement period
+    # is idempotent at the DB level, not just in the reconciler. The exception is a
+    # Plaid row detached by a re-link (no id) until the new Item's copy adopts it;
+    # one older than the new Item's history stays detached for good.
     plaid_transaction_id: Mapped[str | None] = mapped_column(
         String, unique=True, index=True, nullable=True
     )

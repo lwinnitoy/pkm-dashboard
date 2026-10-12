@@ -140,3 +140,39 @@ def test_holdings_sync_refreshes_the_account_balance_and_todays_snapshot(
     assert db_session.get(Account, tfsa.id).current_balance == 21500.25
     snap = db_session.query(BalanceSnapshot).filter_by(account_id=tfsa.id, date=date.today()).one()
     assert snap.balance == 21500.25
+
+
+def test_a_sold_position_is_removed_on_the_next_sync(client, db_session, monkeypatch):
+    """Plaid's holdings response is the full current list; a position missing from
+    it must stop counting toward the portfolio."""
+    from app.models import Holding
+    from tests.factories import make_holding, make_security
+
+    item = make_item(db_session, item_id="ws-1", name="Wealthsimple")
+    tfsa = make_account(db_session, item=item, plaid_account_id="tfsa-1", type="investment")
+    other = make_account(db_session, plaid_account_id="elsewhere", type="investment")
+    kept = make_security(db_session, plaid_security_id="sec-keep", ticker="XEQT")
+    sold = make_security(db_session, plaid_security_id="sec-sold", ticker="SHOP")
+    make_holding(db_session, account=tfsa, security=kept)
+    make_holding(db_session, account=tfsa, security=sold)
+    untouched = make_holding(db_session, account=other, security=sold)  # another item's
+    db_session.commit()
+
+    class Client(FakeInvestmentsClient):
+        def investments_holdings_get(self, request):
+            super().investments_holdings_get(request)  # the other item fails here
+            return SimpleNamespace(
+                securities=[SimpleNamespace(security_id="sec-keep", ticker_symbol="XEQT")],
+                holdings=[
+                    SimpleNamespace(account_id="tfsa-1", security_id="sec-keep", quantity=3.0)
+                ],
+            )
+
+    failures = {"tok-item-for-elsewhere": _api_exception("PRODUCTS_NOT_SUPPORTED", "no")}
+    monkeypatch.setattr(investments_router, "get_plaid_client", lambda: Client(failures))
+
+    assert client.post("/api/investments/sync").status_code == 200
+
+    db_session.expire_all()
+    remaining = {(h.account_id, h.security_id) for h in db_session.query(Holding)}
+    assert remaining == {(tfsa.id, kept.id), (untouched.account_id, sold.id)}

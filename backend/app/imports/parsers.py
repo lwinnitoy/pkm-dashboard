@@ -136,13 +136,14 @@ def _row_amount(row: dict[str, str], cmap: ColumnMap) -> tuple[float, str | None
         return amount, currency
 
     debit = _pick(row, cmap.debit) if cmap.debit else None
-    if debit is not None:
-        return abs(_parse_amount(debit[1])), cmap.default_currency
     credit = _pick(row, cmap.credit) if cmap.credit else None
-    if credit is not None:
-        return -abs(_parse_amount(credit[1])), cmap.default_currency
-
-    raise ParseError("Row has no amount")
+    if debit is None and credit is None:
+        raise ParseError("Row has no amount")
+    # Some banks fill both columns, writing 0.00 on the unused side; a filled
+    # column isn't enough, the side with money in it is the one that counts.
+    out = abs(_parse_amount(debit[1])) if debit else 0.0
+    into = abs(_parse_amount(credit[1])) if credit else 0.0
+    return (out if out or not into else -into), cmap.default_currency
 
 
 def _row_description(row: dict[str, str], cmap: ColumnMap) -> str:

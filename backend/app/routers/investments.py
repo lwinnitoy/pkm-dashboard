@@ -4,7 +4,6 @@ Populated from Plaid's /investments/holdings/get and /investments/transactions/g
 (e.g. for Wealthsimple). Sync is best-effort per item — items without investment
 accounts are skipped rather than failing the whole run.
 """
-import json
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Query
@@ -22,7 +21,7 @@ from app.database import get_db
 from app.investments.contributions import contribution_rate
 from app.investments.valuation import HoldingValuation, value_portfolio
 from app.models import Account, Holding, InvestmentTransaction, PlaidItem, Security
-from app.plaid_client import get_plaid_client
+from app.plaid_client import get_plaid_client, skipped_item
 from app.snapshots import apply_balances, write_snapshot
 from app.schemas import (
     AccountValue,
@@ -88,12 +87,14 @@ def sync_investments_for_item(db: Session, client, item: PlaidItem) -> dict[str,
     sec_map = _upsert_securities(db, holdings_resp.securities)
     counts["securities"] = len(sec_map)
     acct_map = _account_map(db, item)
+    held: set[tuple[int, int]] = set()
 
     for h in holdings_resp.holdings:
         account_id = acct_map.get(h.account_id)
         security = sec_map.get(h.security_id)
         if account_id is None or security is None:
             continue
+        held.add((account_id, security.id))
         existing = (
             db.query(Holding)
             .filter_by(account_id=account_id, security_id=security.id)
@@ -115,6 +116,14 @@ def sync_investments_for_item(db: Session, client, item: PlaidItem) -> dict[str,
             for k, v in values.items():
                 setattr(existing, k, v)
         counts["holdings"] += 1
+
+    # The response is the item's complete current position list, so anything we
+    # hold for its accounts that it no longer mentions was sold or moved out.
+    # Left in place, it would keep counting toward value, cost basis and allocation.
+    if acct_map:
+        for row in db.query(Holding).filter(Holding.account_id.in_(acct_map.values())):
+            if (row.account_id, row.security_id) not in held:
+                db.delete(row)
 
     # --- Investment transactions (paginated over the lookback window) ---
     end = date.today()
@@ -179,18 +188,6 @@ def sync_investments_for_item(db: Session, client, item: PlaidItem) -> dict[str,
     return counts
 
 
-def _plaid_error(exc: ApiException) -> tuple[str, str]:
-    """(error_code, message) from a Plaid ApiException, which carries a JSON body."""
-    try:
-        body = json.loads(exc.body or "{}")
-    except (ValueError, TypeError):
-        body = {}
-    return (
-        body.get("error_code") or "UNKNOWN",
-        body.get("error_message") or str(exc).strip()[:200],
-    )
-
-
 def sync_all_investments(db: Session) -> dict:
     """Sync holdings + investment transactions for every item, best-effort (items
     without investment accounts are skipped, not errored). Shared by the endpoint,
@@ -216,14 +213,7 @@ def sync_all_investments(db: Session) -> dict:
             # Usually "this item has no investment accounts" or "investments was
             # never consented for this item" — keep going, but say which.
             db.rollback()
-            code, message = _plaid_error(exc)
-            skipped.append(
-                {
-                    "institution": item.institution_name or f"item {item.item_id[:8]}",
-                    "error_code": code,
-                    "message": message,
-                }
-            )
+            skipped.append(skipped_item(item, exc))
 
     return {
         **totals,

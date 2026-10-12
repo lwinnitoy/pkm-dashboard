@@ -17,6 +17,9 @@ from app.plaid_client import DEFAULT_CATEGORIES
 from app.routers import auth, budgets, finance, imports, insights, investments, plaid
 from app.scheduler import shutdown_scheduler, start_scheduler
 
+# Uvicorn configures only its own loggers; without this, the app's INFO logs
+# (sync results, scheduler ticks) are silently dropped.
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 

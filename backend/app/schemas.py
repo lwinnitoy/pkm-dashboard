@@ -17,10 +17,19 @@ class ExchangeTokenRequest(BaseModel):
     institution_id: str | None = None
 
 
+class SkippedItem(BaseModel):
+    institution: str
+    error_code: str  # Plaid's code, e.g. PRODUCTS_NOT_SUPPORTED / ITEM_LOGIN_REQUIRED
+    message: str
+
+
 class SyncResponse(BaseModel):
     added: int
     modified: int
     removed: int
+    # Banks that couldn't be synced this time (e.g. ITEM_LOGIN_REQUIRED), and why.
+    items_skipped: int = 0
+    skipped_details: list[SkippedItem] = []
 
 
 class AccountOut(BaseModel):
@@ -115,12 +124,6 @@ class SummaryResponse(BaseModel):
 
 
 # ---- Investments ----
-
-
-class SkippedItem(BaseModel):
-    institution: str
-    error_code: str  # Plaid's code, e.g. PRODUCTS_NOT_SUPPORTED / ITEM_LOGIN_REQUIRED
-    message: str
 
 
 class InvestmentsSyncResponse(BaseModel):
@@ -324,11 +327,16 @@ class AccountCoverageOut(BaseModel):
     last_imported_period_end: date | None
 
 
+# An annual return of -100% or worse has no monthly equivalent (the projection
+# takes a 12th root of 1 + r), so it would 500 every goals request, not just one.
+_ANNUAL_RETURN = dict(gt=-1.0, le=1.0)
+
+
 class GoalCreate(BaseModel):
     name: str
     target_amount: float
     target_date: date
-    expected_annual_return: float = 0.06
+    expected_annual_return: float = Field(0.06, **_ANNUAL_RETURN)
     monthly_contribution: float = 0.0
 
 
@@ -336,7 +344,7 @@ class GoalUpdate(BaseModel):
     name: str | None = None
     target_amount: float | None = None
     target_date: date | None = None
-    expected_annual_return: float | None = None
+    expected_annual_return: float | None = Field(None, **_ANNUAL_RETURN)
     monthly_contribution: float | None = None
 
 

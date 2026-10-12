@@ -18,6 +18,7 @@ from app.models import (
     ImportBatch,
     Transaction,
 )
+from app.plaid_client import get_plaid_client, remove_item
 from app.schemas import (
     AccountOut,
     CategoryComparison,
@@ -230,9 +231,13 @@ def delete_account(account_id: int, db: Session = Depends(get_db)):
     db.delete(account)  # cascades holdings / investment txns
     db.flush()
 
+    removed_token = None
     if item is not None and not item.accounts:
+        removed_token = item.access_token
         db.delete(item)
     db.commit()
+    if removed_token:
+        remove_item(get_plaid_client(), removed_token)
 
 
 @router.get("/spending-trend", response_model=list[TrendPoint])
