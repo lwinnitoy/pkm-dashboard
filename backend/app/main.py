@@ -7,6 +7,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
 
 from app.auth import require_auth
 from app.config import get_settings
@@ -115,7 +116,15 @@ app.include_router(insights.router, dependencies=_protected)
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "plaid_env": settings.plaid_env}
+    """Liveness for Cloud Run's startup probe and uptime checks: up only if the
+    database answers. Open without auth, so it says nothing about the setup."""
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception:
+        logger.exception("health check: database unreachable")
+        return JSONResponse({"status": "unavailable"}, status_code=503)
+    return {"status": "ok"}
 
 
 def mount_frontend(app: FastAPI, dist: Path) -> None:

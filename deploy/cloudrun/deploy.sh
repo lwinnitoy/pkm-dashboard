@@ -34,13 +34,22 @@ image="$REGION-docker.pkg.dev/$PROJECT_ID/pkm/app:$tag"
 echo "==> building $image"
 gcloud builds submit --project "$PROJECT_ID" --tag "$image" .
 
+# env.yaml ships with every deploy; otherwise a change to it only reaches the
+# service and job when someone remembers a manual `--env-vars-file` update.
+env_file=deploy/cloudrun/env.yaml
+
 echo "==> deploying app (migrations run as it starts)"
-gcloud run deploy "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --image "$image"
+# The startup probe waits for /health, which only answers once migrations have
+# run, uvicorn is up and the database (Neon, possibly waking) responds.
+gcloud run deploy "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --image "$image" \
+  --env-vars-file "$env_file" \
+  --startup-probe=httpGet.path=/health,initialDelaySeconds=0,timeoutSeconds=5,periodSeconds=5,failureThreshold=24
 # A rollback pins traffic to an old revision, and pinned traffic survives new
 # deploys; route it back to the revision just created.
 gcloud run services update-traffic "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --to-latest
 
 echo "==> pointing the daily job at the same image"
-gcloud run jobs update "$JOB" --project "$PROJECT_ID" --region "$REGION" --image "$image"
+gcloud run jobs update "$JOB" --project "$PROJECT_ID" --region "$REGION" --image "$image" \
+  --env-vars-file "$env_file"
 
 echo "Deployed $tag."

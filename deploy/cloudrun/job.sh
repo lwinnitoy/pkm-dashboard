@@ -17,7 +17,10 @@ backup_dir="${BACKUP_DIR:-/backups}"
 if [ -d "$backup_dir" ]; then
   # The app's URL names the psycopg driver; pg_dump wants plain postgresql://.
   url=$(printf '%s' "$DATABASE_URL" | sed -E 's#^postgres(ql)?(\+psycopg)?://#postgresql://#')
-  out="$backup_dir/pkm-$(date +%Y-%m-%d).sql.gz"  # local date (TZ is set on the job)
+  # Local time (TZ is set on the job). Timestamped, not just dated: the job's
+  # account can create backups but not overwrite them, so a retry on the same
+  # day needs its own name.
+  out="$backup_dir/pkm-$(date +%Y-%m-%d-%H%M%S).sql.gz"
   # gzip -t catches a truncated file that pg_dump's exit status alone would miss.
   if pg_dump --no-owner --no-privileges "$url" | gzip > "$out" && gzip -t "$out"; then
     echo "backup written: $out ($(du -h "$out" | cut -f1))"

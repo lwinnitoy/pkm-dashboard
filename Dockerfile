@@ -43,6 +43,14 @@ COPY backend/ backend/
 COPY deploy/cloudrun/job.sh deploy/cloudrun/job.sh
 COPY --from=ui /src/frontend/dist frontend/dist
 
+# Run as an unprivileged user. The code stays root-owned (read-only to the app),
+# and nothing is written to disk at runtime: Postgres holds the data and
+# PYTHONDONTWRITEBYTECODE skips .pyc files. The job's backup bucket is mounted
+# with uid/gid 10001 so this user can write the dump (docs/deploy-cloud-run.md).
+RUN groupadd --system --gid 10001 app \
+ && useradd --system --uid 10001 --gid app --no-create-home --shell /usr/sbin/nologin app
+USER app
+
 WORKDIR /srv/backend
 # Migrations run on start. Cloud Run is deployed with
 # --max-instances=1, so two instances never race the same upgrade.

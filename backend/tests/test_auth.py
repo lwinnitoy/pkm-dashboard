@@ -89,3 +89,18 @@ def test_api_docs_are_hidden_when_auth_is_on(client, auth_on):
 
 def test_api_docs_are_served_without_auth(client):
     assert client.get("/openapi.json").status_code == 200
+
+
+def test_health_reports_an_unreachable_database(client, monkeypatch):
+    import app.main as app_main
+
+    class DownEngine:
+        def connect(self):
+            raise ConnectionError("db down")
+
+    monkeypatch.setattr(app_main, "engine", DownEngine())
+
+    resp = client.get("/health")
+
+    assert resp.status_code == 503
+    assert resp.json() == {"status": "unavailable"}

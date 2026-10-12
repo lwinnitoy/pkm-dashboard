@@ -27,6 +27,7 @@ export IMAGE=$REGION-docker.pkg.dev/$PROJECT_ID/pkm/app:initial   # first setup 
 export BUCKET=$PROJECT_ID-backups
 export YOU=you@gmail.com                 # the Google account allowed to sign in
 export RUN_SA=pkm-run@$PROJECT_ID.iam.gserviceaccount.com
+export JOB_SA=pkm-job@$PROJECT_ID.iam.gserviceaccount.com
 ```
 
 `$IMAGE` is only for this first setup. After it, `deploy/cloudrun/deploy.sh` tags every
@@ -58,9 +59,12 @@ gcloud services enable run.googleapis.com cloudbuild.googleapis.com \
   artifactregistry.googleapis.com secretmanager.googleapis.com \
   cloudscheduler.googleapis.com iap.googleapis.com storage.googleapis.com
 gcloud artifacts repositories create pkm --repository-format=docker --location=$REGION
-gcloud iam service-accounts create pkm-run --display-name="pkm app and job"
-gcloud projects add-iam-policy-binding $PROJECT_ID \
-  --member=serviceAccount:$RUN_SA --role=roles/secretmanager.secretAccessor
+gcloud iam service-accounts create pkm-run --display-name="pkm app"
+gcloud iam service-accounts create pkm-job --display-name="pkm daily job"
+for sa in $RUN_SA $JOB_SA; do
+  gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member=serviceAccount:$sa --role=roles/secretmanager.secretAccessor
+done
 ```
 
 ## 3. Neon
@@ -175,24 +179,33 @@ front of the URL doesn't get in its way.
 
 ## 9. Daily sync and backups
 
+The job runs as its own account, `pkm-job`, which can add backups and read them
+but not overwrite or delete them. The web app's account gets no access to the
+bucket, so a compromised app can't destroy backups. A 30-day soft delete makes any
+deletion recoverable anyway. The bucket mounts with uid/gid 10001, the image's
+unprivileged user.
+
 ```bash
-gcloud storage buckets create gs://$BUCKET --location=$REGION --uniform-bucket-level-access
+gcloud storage buckets create gs://$BUCKET --location=$REGION --uniform-bucket-level-access \
+  --soft-delete-duration=30d
 printf '{"rule":[{"action":{"type":"Delete"},"condition":{"age":30}}]}' > /tmp/lifecycle.json
 gcloud storage buckets update gs://$BUCKET --lifecycle-file=/tmp/lifecycle.json   # keep 30 days
-gcloud storage buckets add-iam-policy-binding gs://$BUCKET \
-  --member=serviceAccount:$RUN_SA --role=roles/storage.objectAdmin
+for role in roles/storage.objectCreator roles/storage.objectViewer; do
+  gcloud storage buckets add-iam-policy-binding gs://$BUCKET \
+    --member=serviceAccount:$JOB_SA --role=$role
+done
 
 gcloud run jobs create $JOB --image $IMAGE --region $REGION \
-  --service-account $RUN_SA \
+  --service-account $JOB_SA \
   --command /srv/deploy/cloudrun/job.sh \
   --set-secrets "$SECRETS" \
   --env-vars-file deploy/cloudrun/env.yaml \
-  --add-volume name=backups,type=cloud-storage,bucket=$BUCKET \
+  --add-volume "name=backups,type=cloud-storage,bucket=$BUCKET,mount-options=uid=10001;gid=10001" \
   --add-volume-mount volume=backups,mount-path=/backups \
   --max-retries 1 --task-timeout 15m --memory 512Mi
 
 gcloud run jobs execute $JOB --region $REGION --wait     # try it once now
-gcloud storage ls gs://$BUCKET                            # a pkm-YYYY-MM-DD.sql.gz should appear
+gcloud storage ls gs://$BUCKET                            # a pkm-YYYY-MM-DD-HHMMSS.sql.gz should appear
 ```
 
 Then schedule it daily at 6 am Pacific:
@@ -223,6 +236,12 @@ The job backs up first, then syncs, so neither a failed nor a hung Plaid call ca
 cost a day's backup; either failure marks the run failed. To get an email when that happens, create an alert policy in **Monitoring →
 Alerting** on the Cloud Run job's failed executions.
 
+**Hardening an existing setup.** A project set up before October 2026 had the
+app and the job share `pkm-run` with `objectAdmin` on the bucket, and the image ran
+as root. Run `deploy/cloudrun/harden-backups.sh` once (it's idempotent) to move to
+the layout above, then `deploy/cloudrun/deploy.sh` and one job execution to confirm
+the backup still lands.
+
 ## 10. Check it
 
 On the service URL, on your phone too: sign in, press **Sync now**, and check that
@@ -237,8 +256,9 @@ deploy/cloudrun/deploy.sh
 ```
 
 The script refuses uncommitted changes (`--dirty` overrides) and runs the backend
-tests. Then it builds in Cloud Build, deploys the app and points the daily job at
-the same image. Images are tagged with the commit hash, so the revision list shows
+tests. Then it builds in Cloud Build, deploys the app with `env.yaml` and a startup
+probe on `/health` (which checks the database), and points the daily job at the same
+image and `env.yaml`. Images are tagged with the commit hash, so the revision list shows
 exactly what's live.
 
 **Rolling back:** list revisions, then send all traffic to the previous good one:
@@ -262,8 +282,9 @@ database (or a new project), copy its **direct** connection string, then:
 
 ```bash
 export TARGET_URL='postgresql://…'   # plain postgresql://, not the app's +psycopg form
-gcloud storage cp gs://$BUCKET/pkm-2026-10-04.sql.gz .
-gunzip -c pkm-2026-10-04.sql.gz \
+gcloud storage ls gs://$BUCKET                       # pick a backup
+gcloud storage cp gs://$BUCKET/pkm-2026-10-04-060012.sql.gz .
+gunzip -c pkm-2026-10-04-060012.sql.gz \
   | docker run --rm -i pkm-local psql -v ON_ERROR_STOP=1 --single-transaction "$TARGET_URL"
 docker run --rm pkm-local psql "$TARGET_URL" -c \
   "select (select count(*) from transactions) as txns, (select count(*) from balance_snapshots) as snapshots, (select max(date) from balance_snapshots) as last_snapshot"
@@ -275,6 +296,10 @@ the live app. To switch over, point the `pkm-database-url` secret at the new
 database and redeploy. The Plaid tokens in the dump only decrypt with the same
 `SECRET_ENCRYPTION_KEY`. Balance snapshots can't be re-fetched from Plaid, so
 practise this once before you need it.
+
+A backup deleted in the last 30 days (soft delete) can be brought back first:
+`gcloud storage ls --soft-deleted gs://$BUCKET` lists them with their generation,
+and `gcloud storage restore gs://$BUCKET/NAME#GENERATION` restores one.
 
 **Logs:** Cloud Run → `pkm` (requests) or `pkm-daily` (job runs) → **Logs**.
 
