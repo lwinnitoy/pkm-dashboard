@@ -154,3 +154,14 @@ def test_delete_refuses_seed_cards_but_removes_others(client, db_session):
     assert client.delete("/api/insights/goals.seeded").status_code == 409
     assert client.delete("/api/insights/goals.news").status_code == 204
     assert client.delete("/api/insights/goals.news").status_code == 404
+
+
+def test_a_script_link_in_sources_is_rejected(client):
+    body = {
+        "page": "goals",
+        "title": "Hi",
+        "body": "x",
+        "sources": [{"title": "click me", "url": "javascript:alert(1)"}],
+    }
+
+    assert client.put("/api/insights/goals.bad", json=body).status_code == 422

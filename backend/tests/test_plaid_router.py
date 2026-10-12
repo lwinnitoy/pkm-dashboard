@@ -72,6 +72,10 @@ class FakePlaidClient:
     def item_remove(self, request):
         self.removed_tokens.append(request.access_token)
 
+    def link_token_create(self, request):
+        self.link_request = request
+        return SimpleNamespace(link_token="link-sandbox-123")
+
 
 def _sync_page(*, added=(), modified=(), removed=(), next_cursor, has_more=False):
     return SimpleNamespace(
@@ -340,3 +344,63 @@ def test_card_payments_sync_as_transfers_not_spending(client, fake_client, db_se
     assert by_id["groc"].category == "Groceries"
     summary = client.get("/api/finance/summary").json()
     assert summary["total_spent"] == 80.0
+
+
+
+# --------------------------------------------------------------------------- #
+# a bank's health, and repairing it in update mode                             #
+# --------------------------------------------------------------------------- #
+def test_a_failing_bank_is_flagged_until_it_syncs_again(client, per_item_client, db_session):
+    from tests.factories import make_account, make_item
+
+    bank = make_item(db_session, item_id="bank", name="RBC")
+    make_account(db_session, item=bank, plaid_account_id="acct-1")
+    db_session.commit()
+    per_item_client.sync_pages = {("tok-bank", None): _api_error("ITEM_LOGIN_REQUIRED")}
+
+    client.post("/api/plaid/sync")
+
+    [account] = client.get("/api/finance/accounts").json()
+    assert account["item_error"] == "ITEM_LOGIN_REQUIRED"
+    assert account["plaid_item_id"] == bank.id
+
+    per_item_client.sync_pages = {("tok-bank", None): _sync_page(next_cursor="c1")}
+    client.post("/api/plaid/sync")
+
+    assert client.get("/api/finance/accounts").json()[0]["item_error"] is None
+
+
+def test_update_mode_link_token_reuses_the_items_access_token(client, fake_client, db_session):
+    from tests.factories import make_item
+
+    item = make_item(db_session, item_id="bank")
+    db_session.commit()
+
+    resp = client.post("/api/plaid/create-link-token", json={"item_id": item.id})
+
+    assert resp.status_code == 200
+    assert fake_client.link_request.access_token == "tok-bank"
+    assert "products" not in fake_client.link_request.to_dict()
+
+
+def test_a_new_link_token_asks_for_products(client, fake_client):
+    assert client.post("/api/plaid/create-link-token").status_code == 200
+    assert fake_client.link_request.to_dict()["products"] == ["transactions"]
+    assert "access_token" not in fake_client.link_request.to_dict()
+
+
+def test_update_mode_for_an_unknown_item_is_404(client, fake_client):
+    assert client.post("/api/plaid/create-link-token", json={"item_id": 999}).status_code == 404
+
+
+def test_a_failed_account_fetch_releases_the_new_item(client, fake_client, db_session):
+    def boom(request):
+        raise RuntimeError("plaid down")
+
+    fake_client.accounts_get = boom
+
+    resp = client.post("/api/plaid/exchange-token", json={"public_token": "public-abc"})
+
+    assert resp.status_code == 502
+    assert fake_client.removed_tokens == ["access-xyz"]
+    assert db_session.query(PlaidItem).count() == 0

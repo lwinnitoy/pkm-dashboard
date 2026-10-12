@@ -16,7 +16,7 @@ from plaid.model.transactions_sync_request import TransactionsSyncRequest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.categorization import rule_category
+from app.categorization import category_from_rules, load_rules
 from app.config import get_settings
 from app.database import get_db
 from app.models import SOURCE_PLAID, Account, PlaidItem, Transaction
@@ -28,7 +28,7 @@ from app.plaid_client import (
     remove_item,
     skipped_item,
 )
-from app.schemas import ExchangeTokenRequest, LinkTokenResponse, SyncResponse
+from app.schemas import ExchangeTokenRequest, LinkTokenRequest, LinkTokenResponse, SyncResponse
 from app.snapshots import apply_balances, write_snapshots
 
 router = APIRouter(prefix="/api/plaid", tags=["plaid"])
@@ -36,21 +36,33 @@ logger = logging.getLogger(__name__)
 
 
 @router.post("/create-link-token", response_model=LinkTokenResponse)
-def create_link_token():
+def create_link_token(
+    payload: LinkTokenRequest | None = None, db: Session = Depends(get_db)
+):
+    """A Link token for linking a new bank, or with `item_id`, for repairing an
+    existing login (update mode). Update mode re-authenticates the same Plaid Item,
+    so its account and transaction ids, and everything keyed on them, survive."""
     settings = get_settings()
     client = get_plaid_client()
     request = LinkTokenCreateRequest(
-        products=[Products(p) for p in settings.product_list],
         client_name="Ledger",
         country_codes=[CountryCode(c) for c in settings.country_code_list],
         language="en",
         user=LinkTokenCreateRequestUser(client_user_id="local-user"),
     )
-    # Consent-only products (e.g. investments for Wealthsimple): captured if the
-    # institution supports them, without filtering the institution list.
-    consented = settings.additional_consented_product_list
-    if consented:
-        request.additional_consented_products = [Products(p) for p in consented]
+    if payload is not None and payload.item_id is not None:
+        item = db.get(PlaidItem, payload.item_id)
+        if item is None:
+            raise HTTPException(status_code=404, detail="Linked bank not found")
+        # Update mode: the Item's own access token, and no products (it has them).
+        request.access_token = item.access_token
+    else:
+        request.products = [Products(p) for p in settings.product_list]
+        # Consent-only products (e.g. investments for Wealthsimple): captured if
+        # the institution supports them, without filtering the institution list.
+        consented = settings.additional_consented_product_list
+        if consented:
+            request.additional_consented_products = [Products(p) for p in consented]
     # Required for OAuth institutions (e.g. RBC). Must exactly match a redirect URI
     # registered in the Plaid dashboard.
     if settings.plaid_redirect_uri:
@@ -75,7 +87,16 @@ def exchange_token(payload: ExchangeTokenRequest, db: Session = Depends(get_db))
     access_token = exchange.access_token
     item_id = exchange.item_id
 
-    item = _item_for_relink(db, item_id, payload.institution_id)
+    try:
+        accounts = client.accounts_get(AccountsGetRequest(access_token=access_token))
+    except Exception as exc:
+        # Nothing is stored yet, so the new Item would be live at Plaid with no way
+        # to reach it from here. Release it rather than orphan it.
+        remove_item(client, access_token)
+        raise HTTPException(status_code=502, detail=f"Plaid error: {exc}") from exc
+
+    masks = {getattr(a, "mask", None) for a in accounts.accounts} - {None}
+    item = _item_for_relink(db, item_id, payload.institution_id, masks)
     replaced_token = None
     if item is None:
         item = PlaidItem(
@@ -100,8 +121,8 @@ def exchange_token(payload: ExchangeTokenRequest, db: Session = Depends(get_db))
         item.institution_id = payload.institution_id or item.institution_id
         item.institution_name = payload.institution_name or item.institution_name
         item.transactions_cursor = None  # ids changed; re-walk from the start
+        item.record_error(None)  # freshly authenticated
 
-    accounts = client.accounts_get(AccountsGetRequest(access_token=access_token))
     for acct in accounts.accounts:
         _upsert_account(db, item, acct)
 
@@ -131,20 +152,29 @@ def _detach_transactions(db: Session, item: PlaidItem) -> None:
     plaid_rows.update({Transaction.plaid_transaction_id: None}, synchronize_session=False)
 
 
-def _item_for_relink(db: Session, item_id: str, institution_id: str | None) -> PlaidItem | None:
+def _item_for_relink(
+    db: Session, item_id: str, institution_id: str | None, masks: set[str]
+) -> PlaidItem | None:
     """The existing row this link should update, if any.
 
     Plaid mints a fresh `item_id` (and fresh `account_id`s) every time you go
     through Link, so matching on `item_id` alone never recognizes a re-link and
     every reconnect silently duplicates the institution's accounts. The
-    institution is the stable identity.
+    institution is the stable identity, but not a sufficient one: two separate
+    logins at one bank (personal and joint, say) share it. So a re-link must also
+    bring back at least one account we already hold under that login, by mask.
+    A login with no accounts left is fair game.
     """
     existing = db.query(PlaidItem).filter_by(item_id=item_id).first()
     if existing is not None:
         return existing
-    if institution_id:
-        return db.query(PlaidItem).filter_by(institution_id=institution_id).first()
-    return None
+    if not institution_id:
+        return None
+    candidates = db.query(PlaidItem).filter_by(institution_id=institution_id).all()
+    for candidate in candidates:
+        if masks & {a.mask for a in candidate.accounts}:
+            return candidate
+    return next((c for c in candidates if not c.accounts), None)
 
 
 def _upsert_account(db: Session, item: PlaidItem, acct) -> None:
@@ -240,22 +270,53 @@ def _fetch_item_changes(client, item: PlaidItem) -> _SyncBatch:
     raise AssertionError("unreachable")
 
 
+@dataclass
+class _UpsertContext:
+    """Everything `_upsert_transaction` would otherwise query per row, loaded once
+    per item: a sync can carry thousands of rows (a re-walk after a re-link or the
+    recategorization migration), and per-row round trips to Neon add up."""
+
+    accounts: dict[str, int]  # plaid_account_id -> Account.id
+    rules: dict[str, str]  # match_key -> category
+    existing: dict[str, Transaction]  # plaid_transaction_id -> row
+    adoptable: set[int]  # accounts holding rows a re-link detached
+
+
+def _existing_rows(db: Session, ids: list[str]) -> dict[str, Transaction]:
+    found: dict[str, Transaction] = {}
+    for start in range(0, len(ids), 500):  # keep IN lists a sane size
+        chunk = ids[start : start + 500]
+        for row in db.query(Transaction).filter(Transaction.plaid_transaction_id.in_(chunk)):
+            found[row.plaid_transaction_id] = row
+    return found
+
+
 def _apply_item_changes(db: Session, batch: _SyncBatch) -> None:
     apply_balances(db, batch.accounts)
-    # Accounts whose rows were detached by a re-link; only these can adopt.
-    adoptable = {
-        account_id
-        for (account_id,) in db.query(Transaction.account_id)
-        .filter(Transaction.source == SOURCE_PLAID, Transaction.plaid_transaction_id.is_(None))
-        .distinct()
-    }
-    for txn in batch.added:
-        _upsert_transaction(db, txn, adoptable)
-    # The session doesn't autoflush, and a later page may modify or remove a row
-    # an earlier page added.
-    db.flush()
-    for txn in batch.modified:
-        _upsert_transaction(db, txn, adoptable)
+    ctx = _UpsertContext(
+        accounts=dict(
+            db.query(Account.plaid_account_id, Account.id).filter(
+                Account.plaid_account_id.is_not(None)
+            )
+        ),
+        rules=load_rules(db),
+        existing=_existing_rows(
+            db, [t.transaction_id for t in (*batch.added, *batch.modified)]
+        ),
+        # Accounts whose rows were detached by a re-link; only these can adopt.
+        adoptable={
+            account_id
+            for (account_id,) in db.query(Transaction.account_id)
+            .filter(
+                Transaction.source == SOURCE_PLAID, Transaction.plaid_transaction_id.is_(None)
+            )
+            .distinct()
+        },
+    )
+    # A later page may modify a row an earlier page added; `ctx.existing` tracks
+    # rows added here too, so the modify finds it without a flush.
+    for txn in (*batch.added, *batch.modified):
+        _upsert_transaction(db, txn, ctx)
     db.flush()
     if batch.removed:
         db.query(Transaction).filter(
@@ -283,10 +344,12 @@ def sync_all_items(db: Session) -> dict:
             entry = skipped_item(item, exc)
             logger.warning("transaction sync skipped %s: %s", entry["institution"], entry["error_code"])
             skipped.append(entry)
+            item.record_error(entry["error_code"])
             continue
 
         _apply_item_changes(db, batch)
         item.transactions_cursor = batch.next_cursor
+        item.record_error(None)
         db.commit()
         totals["added"] += len(batch.added)
         totals["modified"] += len(batch.modified)
@@ -332,9 +395,9 @@ def _adopt_detached(db: Session, account_id: int, txn) -> Transaction | None:
     return next((c for c in candidates if c.name == txn.name), candidates[0])
 
 
-def _upsert_transaction(db: Session, txn, adoptable: set[int] = frozenset()) -> None:
-    account = db.query(Account).filter_by(plaid_account_id=txn.account_id).first()
-    if account is None:
+def _upsert_transaction(db: Session, txn, ctx: _UpsertContext) -> None:
+    account_id = ctx.accounts.get(txn.account_id)
+    if account_id is None:
         return  # transaction for an account we haven't stored; skip
 
     pfc = getattr(txn, "personal_finance_category", None)
@@ -343,20 +406,16 @@ def _upsert_transaction(db: Session, txn, adoptable: set[int] = frozenset()) -> 
     merchant = getattr(txn, "merchant_name", None)
 
     # A user's merchant rule wins over Plaid's category so overrides survive sync.
-    override = rule_category(db, merchant, txn.name)
+    override = category_from_rules(ctx.rules, merchant, txn.name)
     category = override or normalize_category(primary, detailed)
 
-    existing = (
-        db.query(Transaction)
-        .filter_by(plaid_transaction_id=txn.transaction_id)
-        .first()
-    )
+    existing = ctx.existing.get(txn.transaction_id)
     adopted = False
-    if existing is None and account.id in adoptable:
-        existing = _adopt_detached(db, account.id, txn)
+    if existing is None and account_id in ctx.adoptable:
+        existing = _adopt_detached(db, account_id, txn)
         adopted = existing is not None
     values = dict(
-        account_id=account.id,
+        account_id=account_id,
         date=txn.date,
         name=txn.name,
         merchant_name=merchant,
@@ -367,10 +426,13 @@ def _upsert_transaction(db: Session, txn, adoptable: set[int] = frozenset()) -> 
         pending=bool(txn.pending),
     )
     if existing is None:
-        db.add(Transaction(plaid_transaction_id=txn.transaction_id, **values))
+        row = Transaction(plaid_transaction_id=txn.transaction_id, **values)
+        db.add(row)
+        ctx.existing[txn.transaction_id] = row
     else:
         for key, val in values.items():
             setattr(existing, key, val)
         if adopted:
             existing.plaid_transaction_id = txn.transaction_id
+            ctx.existing[txn.transaction_id] = existing
             db.flush()  # so the next identical transaction can't adopt it too

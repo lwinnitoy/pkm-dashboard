@@ -42,8 +42,14 @@ _PAGE = 500  # max page size for /investments/transactions/get
 def _upsert_securities(db: Session, securities) -> dict[str, Security]:
     """Upsert Plaid securities; return a map of plaid_security_id -> Security row."""
     out: dict[str, Security] = {}
+    ids = [s.security_id for s in securities]
+    known = {
+        row.plaid_security_id: row
+        for row in db.query(Security).filter(Security.plaid_security_id.in_(ids))
+    } if ids else {}
+    added = False
     for s in securities:
-        row = db.query(Security).filter_by(plaid_security_id=s.security_id).first()
+        row = known.get(s.security_id)
         values = dict(
             ticker_symbol=getattr(s, "ticker_symbol", None),
             name=getattr(s, "name", None),
@@ -55,11 +61,14 @@ def _upsert_securities(db: Session, securities) -> dict[str, Security]:
         if row is None:
             row = Security(plaid_security_id=s.security_id, **values)
             db.add(row)
-            db.flush()  # assign row.id for FK use
+            known[s.security_id] = row
+            added = True
         else:
             for k, v in values.items():
                 setattr(row, k, v)
         out[s.security_id] = row
+    if added:
+        db.flush()  # assign ids to the new rows for FK use
     return out
 
 
@@ -88,6 +97,10 @@ def sync_investments_for_item(db: Session, client, item: PlaidItem) -> dict[str,
     counts["securities"] = len(sec_map)
     acct_map = _account_map(db, item)
     held: set[tuple[int, int]] = set()
+    current = {
+        (row.account_id, row.security_id): row
+        for row in db.query(Holding).filter(Holding.account_id.in_(acct_map.values()))
+    } if acct_map else {}
 
     for h in holdings_resp.holdings:
         account_id = acct_map.get(h.account_id)
@@ -95,11 +108,7 @@ def sync_investments_for_item(db: Session, client, item: PlaidItem) -> dict[str,
         if account_id is None or security is None:
             continue
         held.add((account_id, security.id))
-        existing = (
-            db.query(Holding)
-            .filter_by(account_id=account_id, security_id=security.id)
-            .first()
-        )
+        existing = current.get((account_id, security.id))
         values = dict(
             quantity=h.quantity,
             institution_price=getattr(h, "institution_price", None),
@@ -111,7 +120,9 @@ def sync_investments_for_item(db: Session, client, item: PlaidItem) -> dict[str,
             updated_at=datetime.now(timezone.utc),
         )
         if existing is None:
-            db.add(Holding(account_id=account_id, security_id=security.id, **values))
+            row = Holding(account_id=account_id, security_id=security.id, **values)
+            db.add(row)
+            current[(account_id, security.id)] = row
         else:
             for k, v in values.items():
                 setattr(existing, k, v)
@@ -120,10 +131,9 @@ def sync_investments_for_item(db: Session, client, item: PlaidItem) -> dict[str,
     # The response is the item's complete current position list, so anything we
     # hold for its accounts that it no longer mentions was sold or moved out.
     # Left in place, it would keep counting toward value, cost basis and allocation.
-    if acct_map:
-        for row in db.query(Holding).filter(Holding.account_id.in_(acct_map.values())):
-            if (row.account_id, row.security_id) not in held:
-                db.delete(row)
+    for key, row in current.items():
+        if key not in held:
+            db.delete(row)
 
     # --- Investment transactions (paginated over the lookback window) ---
     end = date.today()
@@ -148,16 +158,19 @@ def sync_investments_for_item(db: Session, client, item: PlaidItem) -> dict[str,
         batch = resp.investment_transactions
         if not batch:
             break
+        page_ids = [it.investment_transaction_id for it in batch]
+        known_txns = {
+            row.plaid_investment_transaction_id: row
+            for row in db.query(InvestmentTransaction).filter(
+                InvestmentTransaction.plaid_investment_transaction_id.in_(page_ids)
+            )
+        }
         for it in batch:
             account_id = acct_map.get(it.account_id)
             if account_id is None:
                 continue
             security = sec_map.get(getattr(it, "security_id", None))
-            existing = (
-                db.query(InvestmentTransaction)
-                .filter_by(plaid_investment_transaction_id=it.investment_transaction_id)
-                .first()
-            )
+            existing = known_txns.get(it.investment_transaction_id)
             values = dict(
                 account_id=account_id,
                 security_id=security.id if security else None,
@@ -172,12 +185,12 @@ def sync_investments_for_item(db: Session, client, item: PlaidItem) -> dict[str,
                 currency=getattr(it, "iso_currency_code", None),
             )
             if existing is None:
-                db.add(
-                    InvestmentTransaction(
-                        plaid_investment_transaction_id=it.investment_transaction_id,
-                        **values,
-                    )
+                row = InvestmentTransaction(
+                    plaid_investment_transaction_id=it.investment_transaction_id,
+                    **values,
                 )
+                db.add(row)
+                known_txns[it.investment_transaction_id] = row
             else:
                 for k, v in values.items():
                     setattr(existing, k, v)

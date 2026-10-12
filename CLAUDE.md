@@ -122,10 +122,13 @@ transaction dated after it (`app/imports/balance.py`); the derived value is stor
 
 Two traps this path exposed, both worth knowing before touching spending queries:
 **(1)** `category NOT IN (...)` is UNKNOWN for `NULL`, so uncategorized rows get dropped
-from totals instead of counted — use the NULL-safe `IS_SPEND_CATEGORY` helper in
-`routers/finance.py`, and group by its `CATEGORY_LABEL` rather than the raw column (NULL
-and the literal "Uncategorized" are one bucket; grouped apart, a dict keyed by name keeps
-only one of them). **(2)** Importing a card *and* the account that pays it double-books
+from totals instead of counted — filter spending with `COUNTS_AS_SPEND` in
+`routers/finance.py` (NULL-safe, built on `IS_SPEND_CATEGORY`), and group by its
+`CATEGORY_LABEL` rather than the raw column (NULL and the literal "Uncategorized" are one
+bucket; grouped apart, a dict keyed by name keeps only one of them). Spending is **net of
+refunds**: a negative amount in a real spend category reduces it, while an uncategorized
+deposit is income. Code that buckets rows in Python uses the twin `spend_or_income`, so
+every view (summary, budgets, merchants, comparison, trend) agrees. **(2)** Importing a card *and* the account that pays it double-books
 every payment, so transfer-looking descriptions are auto-categorized `Transfers` and
 excluded from spend *and* income (`app/imports/categorize.py`). Account `type` also
 matters: `LIABILITY_TYPES` decides asset vs. debt, so a credit card must not be created

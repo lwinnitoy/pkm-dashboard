@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Budget, Transaction
-from app.routers.finance import CATEGORY_LABEL, IS_SPEND_CATEGORY
+from app.routers.finance import CATEGORY_LABEL, COUNTS_AS_SPEND
 from app.schemas import BudgetCreate, BudgetOut, BudgetStatus, BudgetStatusItem, BudgetUpdate
 
 router = APIRouter(prefix="/api/finance/budgets", tags=["budgets"])
@@ -84,8 +84,7 @@ def budget_status(
         .filter(
             Transaction.date >= start,
             Transaction.date < end,
-            Transaction.amount > 0,
-            IS_SPEND_CATEGORY,
+            COUNTS_AS_SPEND,  # net of refunds
         )
         .group_by(CATEGORY_LABEL)
         .all()
@@ -111,7 +110,8 @@ def budget_status(
 
     budgeted = {b.category for b in budgets}
     for cat, spent in spent_by_cat.items():
-        if cat not in budgeted:
+        # Skip a category refunded down to nothing: there's nothing to budget.
+        if cat not in budgeted and spent > 0:
             items.append(
                 BudgetStatusItem(
                     budget_id=None, category=cat, limit=None, spent=spent,

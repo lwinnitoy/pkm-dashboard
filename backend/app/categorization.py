@@ -18,6 +18,20 @@ def match_key(merchant_name: str | None, name: str | None) -> str | None:
     return value or None
 
 
+def load_rules(db: Session) -> dict[str, str]:
+    """Every rule as {match_key: category}: load once, then categorize many rows
+    with `category_from_rules` instead of one query per row."""
+    return dict(db.query(CategoryRule.match_key, CategoryRule.category).all())
+
+
+def category_from_rules(
+    rules: dict[str, str], merchant_name: str | None, name: str | None
+) -> str | None:
+    """`rule_category` against preloaded rules."""
+    key = match_key(merchant_name, name)
+    return rules.get(key) if key is not None else None
+
+
 def rule_category(db: Session, merchant_name: str | None, name: str | None) -> str | None:
     """The user-defined category for this merchant, if a rule exists."""
     key = match_key(merchant_name, name)

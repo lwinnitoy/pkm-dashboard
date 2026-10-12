@@ -47,6 +47,7 @@ def refresh_balances(db: Session) -> None:
             logger.warning(
                 "balance refresh skipped %s: %s", entry["institution"], entry["error_code"]
             )
+            item.record_error(entry["error_code"])
             continue
         apply_balances(db, resp.accounts)
 

@@ -51,6 +51,16 @@ from app.main import app  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
+def _fresh_login_throttle():
+    """Failed-login counts are process-wide; don't let one test's lock out another."""
+    from app.auth import login_throttle
+
+    login_throttle.reset()
+    yield
+    login_throttle.reset()
+
+
+@pytest.fixture(autouse=True)
 def _no_scheduler(monkeypatch):
     """Stop the lifespan from starting the real BackgroundScheduler in tests."""
     monkeypatch.setattr(app_main, "start_scheduler", lambda: None)

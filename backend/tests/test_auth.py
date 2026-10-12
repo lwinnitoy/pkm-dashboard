@@ -50,3 +50,42 @@ def test_tampered_token_rejected(client, auth_on):
 
 def test_health_stays_open_when_auth_enabled(client, auth_on):
     assert client.get("/health").status_code == 200
+
+
+def test_repeated_wrong_passwords_are_throttled(client, auth_on):
+    for _ in range(5):
+        assert client.post("/api/auth/login", json={"password": "nope"}).status_code == 401
+
+    blocked = client.post("/api/auth/login", json={"password": PASSWORD})
+
+    assert blocked.status_code == 429  # even the right password, until the window passes
+    assert int(blocked.headers["Retry-After"]) > 0
+
+
+def test_throttle_is_per_client(client, auth_on):
+    for _ in range(5):
+        client.post("/api/auth/login", json={"password": "nope"}, headers={"X-Forwarded-For": "1.1.1.1"})
+
+    other = client.post(
+        "/api/auth/login", json={"password": PASSWORD}, headers={"X-Forwarded-For": "2.2.2.2"}
+    )
+    assert other.status_code == 200
+
+
+def test_changing_the_password_signs_old_tokens_out(client, auth_on):
+    token = client.post("/api/auth/login", json={"password": PASSWORD}).json()["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    assert client.get("/api/finance/accounts", headers=headers).status_code == 200
+
+    get_settings().app_password = "a new passphrase"
+
+    assert client.get("/api/finance/accounts", headers=headers).status_code == 401
+
+
+def test_api_docs_are_hidden_when_auth_is_on(client, auth_on):
+    assert client.get("/docs").status_code == 404
+    assert client.get("/openapi.json").status_code == 404
+
+
+def test_api_docs_are_served_without_auth(client):
+    assert client.get("/openapi.json").status_code == 200

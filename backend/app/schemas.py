@@ -2,7 +2,12 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+class LinkTokenRequest(BaseModel):
+    # Set to repair an existing login (Plaid "update mode"): same Item, same ids.
+    item_id: int | None = None
 
 
 class LinkTokenResponse(BaseModel):
@@ -47,6 +52,10 @@ class AccountOut(BaseModel):
     # Which linked login this belongs to — the way to tell two identically-named
     # accounts apart when an institution has been linked more than once.
     institution_name: str | None = None
+    # The linked login (PlaidItem.id) this belongs to, and why its last sync failed
+    # (e.g. ITEM_LOGIN_REQUIRED), so the UI can offer to reconnect it.
+    plaid_item_id: int | None = None
+    item_error: str | None = None
     # Manual accounts: the date the owner's entered balance was true as of (later
     # imports roll it forward). None for Plaid accounts.
     balance_anchor_date: date | None = None
@@ -321,6 +330,8 @@ class AccountCoverageOut(BaseModel):
     account_id: int
     account_name: str | None
     account_type: str | None
+    # Tells Savings from Chequing (both "depository") in the Import page's picker.
+    account_subtype: str | None = None
     source: str
     covered: list[DateRangeOut]
     gaps: list[DateRangeOut]
@@ -375,6 +386,14 @@ SLUG = r"^[a-z0-9]+(?:-[a-z0-9]+)*$"
 class InsightSource(BaseModel):
     title: str
     url: str
+
+    @field_validator("url")
+    @classmethod
+    def _web_link(cls, url: str) -> str:
+        # Rendered as a link, so a javascript: or data: URL would run on click.
+        if not url.lower().startswith(("https://", "http://")):
+            raise ValueError("source links must be http(s) URLs")
+        return url
 
 
 class InsightContent(BaseModel):

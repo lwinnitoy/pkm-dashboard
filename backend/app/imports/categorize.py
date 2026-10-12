@@ -14,7 +14,7 @@ import re
 
 from sqlalchemy.orm import Session
 
-from app.categorization import rule_category
+from app.categorization import category_from_rules, rule_category
 
 TRANSFERS = "Transfers"
 UNCATEGORIZED = "Uncategorized"
@@ -40,10 +40,17 @@ def looks_like_transfer(description: str | None) -> bool:
     return bool(description) and bool(_TRANSFER_RE.search(description))
 
 
-def resolve_category(db: Session, description: str) -> str:
+def resolve_category(
+    db: Session, description: str, rules: dict[str, str] | None = None
+) -> str:
     """Category for an imported row. A user's own rule always wins, so a
-    misfiring transfer pattern can be corrected once and stays corrected."""
-    return (
-        rule_category(db, None, description)
-        or (TRANSFERS if looks_like_transfer(description) else UNCATEGORIZED)
+    misfiring transfer pattern can be corrected once and stays corrected.
+
+    Pass `rules` (from `load_rules`) when categorizing a whole file, so it costs
+    one query rather than one per row."""
+    ruled = (
+        category_from_rules(rules, None, description)
+        if rules is not None
+        else rule_category(db, None, description)
     )
+    return ruled or (TRANSFERS if looks_like_transfer(description) else UNCATEGORIZED)

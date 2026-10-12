@@ -301,3 +301,15 @@ def test_relink_removes_the_replaced_item_at_plaid(client, db_session, link_clie
     _link(client)
 
     assert link_client.removed_tokens == ["access-1"]
+
+
+
+def test_a_second_login_at_the_same_bank_stays_separate(client, db_session, link_client):
+    """Personal and joint logins share an institution id but no accounts."""
+    _link(client)
+    link_client.accounts = [_account("joint", "Joint Chequing", "9999", "checking")]
+    _link(client)
+
+    assert db_session.query(PlaidItem).count() == 2
+    assert db_session.query(Account).count() == 3
+    assert link_client.removed_tokens == []  # nothing was replaced
