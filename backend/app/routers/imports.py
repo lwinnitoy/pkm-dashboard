@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.imports import parsers, reconcile
 from app.imports import balance
+from app.categorization import load_rules
 from app.imports.categorize import TRANSFERS, resolve_category
 from app.imports.parsers import PRESETS, ParseError
 from app.models import SOURCE_CSV, Account, ImportBatch, Transaction
@@ -138,7 +139,8 @@ def preview_import(
     result = reconcile.reconcile(db, account.id, rows)
     # Pair each classified row with the category it would be written with, so the
     # preview shows transfer detection before anything is committed.
-    categorized = [(c, resolve_category(db, c.row.description)) for c in result.rows]
+    rules = load_rules(db)
+    categorized = [(c, resolve_category(db, c.row.description, rules)) for c in result.rows]
 
     return ImportPreviewOut(
         account_id=account.id,
@@ -192,6 +194,7 @@ def commit_import(
     db.flush()
 
     to_write = result.new_rows + (result.conflicting_rows if include_conflicts else [])
+    rules = load_rules(db)
     for classified in to_write:
         row = classified.row
         db.add(
@@ -204,7 +207,7 @@ def commit_import(
                 name=row.description,
                 amount=row.amount,
                 currency=row.currency or account.currency,
-                category=resolve_category(db, row.description),
+                category=resolve_category(db, row.description, rules),
             )
         )
     batch.rows_imported = len(to_write)
@@ -244,6 +247,7 @@ def coverage(db: Session = Depends(get_db)):
                 account_id=account.id,
                 account_name=account.name,
                 account_type=account.type,
+                account_subtype=account.subtype,
                 source=account.source,
                 covered=[_range(r) for r in covered],
                 gaps=[_range(g) for g in reconcile.find_gaps(covered)],

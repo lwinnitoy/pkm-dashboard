@@ -89,8 +89,8 @@ corrected.
 > 'Transfers')` evaluates to UNKNOWN when `category IS NULL`, so those rows are
 > dropped from the result rather than counted. That silently reported `$0` spent
 > against 352 imported transactions. Spending queries use the NULL-safe
-> `IS_SPEND_CATEGORY` helper in `routers/finance.py` — reuse it rather than
-> writing the predicate again.
+> `COUNTS_AS_SPEND` filter in `routers/finance.py` (which also nets refunds) —
+> reuse it rather than writing the predicate again.
 
 ## Reconciling overlap
 

@@ -2,39 +2,47 @@
 // across every page.
 import { parseDate } from "./dates";
 
-const currencyFmt = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 2,
-});
+/** Amounts are shown in this currency unless a row says otherwise. Totals across
+ * accounts are summed as-is: there's no FX conversion, so a US$ account counts
+ * at face value. */
+export const HOME_CURRENCY = "CAD";
 
-const currencyWholeFmt = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-});
+const formatters = new Map<string, Intl.NumberFormat>();
 
-const compactFmt = new Intl.NumberFormat("en-US", {
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
+/** en-CA formatting: "$1,234.56" for CAD, "US$12.00" for anything foreign, so a
+ * row in another currency is never mistaken for a home-currency one. */
+function fmt(code: string | null | undefined, options: Intl.NumberFormatOptions): Intl.NumberFormat {
+  const cur = (code || HOME_CURRENCY).toUpperCase();
+  const key = `${cur}|${JSON.stringify(options)}`;
+  let f = formatters.get(key);
+  if (!f) {
+    try {
+      f = new Intl.NumberFormat("en-CA", { style: "currency", currency: cur, ...options });
+    } catch {
+      // An unknown code from upstream data: fall back rather than throw mid-render.
+      f = new Intl.NumberFormat("en-CA", { style: "currency", currency: HOME_CURRENCY, ...options });
+    }
+    formatters.set(key, f);
+  }
+  return f;
+}
 
-/** $1,234.56 */
-export function currency(n: number | null | undefined): string {
+/** $1,234.56 (or US$1,234.56 when `code` isn't the home currency) */
+export function currency(n: number | null | undefined, code?: string | null): string {
   if (n == null) return "—";
-  return currencyFmt.format(n);
+  return fmt(code, { maximumFractionDigits: 2 }).format(n);
 }
 
 /** $1,235 (no cents) — for large headline numbers */
-export function currencyWhole(n: number | null | undefined): string {
+export function currencyWhole(n: number | null | undefined, code?: string | null): string {
   if (n == null) return "—";
-  return currencyWholeFmt.format(n);
+  return fmt(code, { maximumFractionDigits: 0 }).format(n);
 }
 
-/** $1.2K / $3.4M — for chart axes and dense tables */
-export function currencyCompact(n: number | null | undefined): string {
+/** $1.2K / $3.4M / -$1.2K — for chart axes and dense tables */
+export function currencyCompact(n: number | null | undefined, code?: string | null): string {
   if (n == null) return "—";
-  return `$${compactFmt.format(n)}`;
+  return fmt(code, { notation: "compact", maximumFractionDigits: 1 }).format(n);
 }
 
 /** 12.3% with an explicit sign */

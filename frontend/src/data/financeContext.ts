@@ -29,6 +29,8 @@ export function granularityFor(days: number): "day" | "week" | "month" {
 
 export interface FinanceContextValue {
   loading: boolean;
+  /** A refresh has succeeded at least once, so the data is real, not placeholders. */
+  loaded: boolean;
   error: string | null;
   message: string | null;
   syncing: boolean;
@@ -46,7 +48,9 @@ export interface FinanceContextValue {
   comparison: CategoryComparison[];
   netWorth: NetWorthPoint[];
   goals: Goal[];
+  /** null means "no investments linked"; a failed fetch is `portfolioError` instead. */
   portfolio: PortfolioSummary | null;
+  portfolioError: string | null;
   categories: string[];
 
   refresh: () => Promise<void>;

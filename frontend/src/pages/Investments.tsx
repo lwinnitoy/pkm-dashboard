@@ -1,14 +1,43 @@
 import { useEffect, useState } from "react";
-import { api, type Holding, type InvestmentTransaction } from "../api/client";
+import { api, errorText, type Holding, type InvestmentTransaction } from "../api/client";
 import CategoryBreakdown from "../components/CategoryBreakdown";
 import { Card, Delta, EmptyState, MetricTile } from "../components/ui";
 import { useFinance } from "../data/financeContext";
 import { currency, percent, shortDate } from "../lib/format";
 
 /** A gain reads as a change, so it always carries its sign: +$12.30 / -$12.30. */
-function signedCurrency(n: number): string {
-  return `${n >= 0 ? "+" : ""}${currency(n)}`;
+function signedCurrency(n: number, code?: string | null): string {
+  return `${n >= 0 ? "+" : ""}${currency(n, code)}`;
 }
+
+/** A list fetched by this page: null while loading, or why it failed. */
+type Loaded<T> = { rows: T[] | null; error: string | null };
+
+function useList<T>(fetch: () => Promise<T[]>): Loaded<T> {
+  const [state, setState] = useState<Loaded<T>>({ rows: null, error: null });
+  useEffect(() => {
+    let live = true;
+    fetch().then(
+      (rows) => live && setState({ rows, error: null }),
+      (e: unknown) => live && setState({ rows: null, error: errorText(e) }),
+    );
+    return () => {
+      live = false;
+    };
+  }, [fetch]);
+  return state;
+}
+
+/** The loading / failed / empty message for a list, or null to render the rows. */
+function listState<T>({ rows, error }: Loaded<T>, what: string): string | null {
+  if (error) return `Couldn't load ${what}: ${error}`;
+  if (rows == null) return "Loading…";
+  if (rows.length === 0) return `No ${what}.`;
+  return null;
+}
+
+const fetchHoldings = () => api.holdings();
+const fetchActivity = () => api.investmentTransactions(50);
 
 function plural(n: number, noun: string): string {
   return `${n} ${noun}${n === 1 ? "" : "s"}`;
@@ -39,14 +68,13 @@ function PriceHint({ h }: { h: Holding }) {
 }
 
 export default function Investments() {
-  const { portfolio, loading } = useFinance();
-  const [holdings, setHoldings] = useState<Holding[]>([]);
-  const [txns, setTxns] = useState<InvestmentTransaction[]>([]);
-
-  useEffect(() => {
-    api.holdings().then(setHoldings).catch(() => setHoldings([]));
-    api.investmentTransactions(50).then(setTxns).catch(() => setTxns([]));
-  }, []);
+  const { portfolio, portfolioError, loading } = useFinance();
+  const holdingsList = useList<Holding>(fetchHoldings);
+  const activityList = useList<InvestmentTransaction>(fetchActivity);
+  const holdings = holdingsList.rows ?? [];
+  const txns = activityList.rows ?? [];
+  const holdingsEmpty = listState(holdingsList, "holdings");
+  const activityEmpty = listState(activityList, "investment transactions");
 
   // total_value is null exactly when nothing is linked (the seam's contract), so
   // an investment account whose holdings haven't synced yet still shows here.
@@ -54,6 +82,13 @@ export default function Investments() {
     return (
       <Card title="Investments">
         <EmptyState>Loading…</EmptyState>
+      </Card>
+    );
+  }
+  if (portfolio == null && portfolioError) {
+    return (
+      <Card title="Investments">
+        <EmptyState>Couldn't load investments: {portfolioError}</EmptyState>
       </Card>
     );
   }
@@ -150,85 +185,89 @@ export default function Investments() {
             : undefined
         }
       >
-        {holdings.length === 0 ? (
-          <EmptyState>No holdings.</EmptyState>
+        {holdingsEmpty ? (
+          <EmptyState>{holdingsEmpty}</EmptyState>
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Holding</th>
-                <th className="num">Qty</th>
-                <th className="num">Price</th>
-                <th className="num">Value</th>
-                <th className="num">Cost</th>
-                <th className="num">Gain / loss</th>
-              </tr>
-            </thead>
-            <tbody>
-              {holdings.map((h, i) => (
-                <tr key={`${h.account_id}-${h.ticker ?? h.security_name ?? i}`}>
-                  <td>
-                    <span className="account-name">{h.ticker ?? "—"}</span>{" "}
-                    <span className="muted">{h.security_name ?? ""}</span>
-                  </td>
-                  <td className="num">{h.quantity ?? "—"}</td>
-                  <td className="num">
-                    {currency(h.price)}
-                    <PriceHint h={h} />
-                  </td>
-                  <td className="num">{currency(h.value)}</td>
-                  <td className="num">{currency(h.cost_basis)}</td>
-                  <td
-                    className={`num ${h.gain == null ? "" : h.gain >= 0 ? "amt-in" : "amt-out"}`}
-                  >
-                    {h.gain == null ? "—" : signedCurrency(h.gain)}
-                    {h.gain_pct != null && (
-                      <div className="cell-hint">{percent(h.gain_pct, true)}</div>
-                    )}
-                  </td>
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Holding</th>
+                  <th className="num">Qty</th>
+                  <th className="num">Price</th>
+                  <th className="num">Value</th>
+                  <th className="num">Cost</th>
+                  <th className="num">Gain / loss</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {holdings.map((h, i) => (
+                  <tr key={`${h.account_id}-${h.ticker ?? h.security_name ?? i}`}>
+                    <td>
+                      <span className="account-name">{h.ticker ?? "—"}</span>{" "}
+                      <span className="muted">{h.security_name ?? ""}</span>
+                    </td>
+                    <td className="num">{h.quantity ?? "—"}</td>
+                    <td className="num">
+                      {currency(h.price, h.currency)}
+                      <PriceHint h={h} />
+                    </td>
+                    <td className="num">{currency(h.value, h.currency)}</td>
+                    <td className="num">{currency(h.cost_basis, h.currency)}</td>
+                    <td
+                      className={`num ${h.gain == null ? "" : h.gain >= 0 ? "amt-in" : "amt-out"}`}
+                    >
+                      {h.gain == null ? "—" : signedCurrency(h.gain, h.currency)}
+                      {h.gain_pct != null && (
+                        <div className="cell-hint">{percent(h.gain_pct, true)}</div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
 
       <Card title="Investment activity">
-        {txns.length === 0 ? (
-          <EmptyState>No investment transactions.</EmptyState>
+        {activityEmpty ? (
+          <EmptyState>{activityEmpty}</EmptyState>
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Activity</th>
-                <th>Type</th>
-                <th className="num">Qty</th>
-                <th className="num">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {txns.map((t) => {
-                // Plaid: negative = cash credited to the account (e.g. a dividend).
-                const moneyIn = t.amount != null && t.amount < 0;
-                return (
-                  <tr key={t.id}>
-                    <td className="muted">{shortDate(t.date)}</td>
-                    <td>{t.name ?? t.ticker ?? "—"}</td>
-                    <td>
-                      <span className="tag">{t.subtype ?? t.type ?? "—"}</span>
-                    </td>
-                    <td className="num">{t.quantity ?? "—"}</td>
-                    <td
-                      className={`num ${t.amount == null ? "" : moneyIn ? "amt-in" : "amt-out"}`}
-                    >
-                      {t.amount == null ? "—" : `${moneyIn ? "+" : ""}${currency(Math.abs(t.amount))}`}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Activity</th>
+                  <th>Type</th>
+                  <th className="num">Qty</th>
+                  <th className="num">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {txns.map((t) => {
+                  // Plaid: negative = cash credited to the account (e.g. a dividend).
+                  const moneyIn = t.amount != null && t.amount < 0;
+                  return (
+                    <tr key={t.id}>
+                      <td className="muted">{shortDate(t.date)}</td>
+                      <td>{t.name ?? t.ticker ?? "—"}</td>
+                      <td>
+                        <span className="tag">{t.subtype ?? t.type ?? "—"}</span>
+                      </td>
+                      <td className="num">{t.quantity ?? "—"}</td>
+                      <td
+                        className={`num ${t.amount == null ? "" : moneyIn ? "amt-in" : "amt-out"}`}
+                      >
+                        {t.amount == null ? "—" : `${moneyIn ? "+" : ""}${currency(Math.abs(t.amount), t.currency)}`}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
     </>

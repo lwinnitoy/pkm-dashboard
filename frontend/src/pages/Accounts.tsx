@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api, type Account } from "../api/client";
+import { api, errorText, type Account } from "../api/client";
 import PlaidLinkButton from "../components/PlaidLinkButton";
 import { Card, EmptyState } from "../components/ui";
 import { useFinance } from "../data/financeContext";
@@ -15,6 +15,24 @@ function subtitle(a: Account): string {
   ]
     .filter(Boolean)
     .join(" · ");
+}
+
+/** What a failing login needs from you, for its chip. */
+function itemProblem(code: string): string {
+  return code === "ITEM_LOGIN_REQUIRED" ? "needs sign-in" : `sync failing: ${code}`;
+}
+
+/** The first account of each failing login: where its single Reconnect button goes. */
+function reconnectRows(accounts: Account[]): Set<number> {
+  const seen = new Set<number>();
+  const rows = new Set<number>();
+  for (const a of accounts) {
+    if (a.item_error && a.plaid_item_id != null && !seen.has(a.plaid_item_id)) {
+      seen.add(a.plaid_item_id);
+      rows.add(a.id);
+    }
+  }
+  return rows;
 }
 
 function isLiability(a: Account): boolean {
@@ -97,6 +115,7 @@ export default function Accounts() {
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
   const [deleting, setDeleting] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const reconnect = reconnectRows(accounts);
 
   async function confirmDelete(id: number) {
     setDeleting(id);
@@ -106,7 +125,7 @@ export default function Accounts() {
       setPendingDelete(null);
       await refresh();
     } catch (e) {
-      setError(`Couldn't delete the account. ${e instanceof Error ? e.message : e}`);
+      setError(`Couldn't delete the account. ${errorText(e)}`);
     } finally {
       setDeleting(null);
     }
@@ -118,7 +137,7 @@ export default function Accounts() {
       sub={accounts.length ? `${accounts.length} accounts` : undefined}
       action={
         <div className="topbar-actions">
-          <PlaidLinkButton onLinked={refresh} />
+          <PlaidLinkButton onLinked={sync} />
           <button className="btn" onClick={sync} disabled={syncing}>
             {syncing ? "Syncing…" : "Sync now"}
           </button>
@@ -146,6 +165,7 @@ export default function Accounts() {
                 <div className="account-name">
                   {a.name ?? "Account"}{" "}
                   {a.source === "csv" && <span className="chip">imported</span>}
+                  {a.item_error && <span className="chip chip-warn">{itemProblem(a.item_error)}</span>}
                 </div>
                 <div className="account-meta">{subtitle(a)}</div>
                 {a.source === "csv" && a.balance_anchor_date && (
@@ -193,6 +213,13 @@ export default function Accounts() {
                 </div>
               ) : (
                 <div className="topbar-actions">
+                  {reconnect.has(a.id) && a.plaid_item_id != null && (
+                    <PlaidLinkButton
+                      itemId={a.plaid_item_id}
+                      label={`Reconnect ${a.institution_name ?? "bank"}`}
+                      onLinked={sync}
+                    />
+                  )}
                   {a.source === "csv" && a.current_balance == null ? (
                     <button
                       className="btn btn-ghost"
@@ -202,7 +229,7 @@ export default function Accounts() {
                       Set balance
                     </button>
                   ) : (
-                    <span>{currency(a.current_balance)}</span>
+                    <span>{currency(a.current_balance, a.currency)}</span>
                   )}
                   {a.source === "csv" && a.current_balance != null && (
                     <button

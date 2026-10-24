@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import ColumnElement, func, or_
+from sqlalchemy import ColumnElement, and_, func, not_, or_
 from sqlalchemy.orm import Session
 
 from app.categorization import match_key, upsert_rule_and_apply
@@ -18,6 +18,7 @@ from app.models import (
     ImportBatch,
     Transaction,
 )
+from app.plaid_client import get_plaid_client, remove_item
 from app.schemas import (
     AccountOut,
     CategoryComparison,
@@ -49,6 +50,29 @@ IS_SPEND_CATEGORY = or_(
     Transaction.category.is_(None),
     Transaction.category.notin_(NON_SPEND_CATEGORIES),
 )
+
+IS_UNCATEGORIZED = or_(Transaction.category.is_(None), Transaction.category == "Uncategorized")
+
+# What counts toward spending, everywhere (summary, merchants, comparison, budgets,
+# trend): every charge in a spend category, *net of refunds*. A negative amount in a
+# real spend category is money back on a purchase, so it reduces that category; a
+# returned $100 jacket nets Shopping to $0. An uncategorized deposit is different:
+# it's far more likely a paycheque or e-transfer than a refund, so it's income.
+COUNTS_AS_SPEND = and_(
+    IS_SPEND_CATEGORY,
+    or_(Transaction.amount > 0, not_(IS_UNCATEGORIZED)),
+)
+
+
+def spend_or_income(category: str | None, amount: float) -> str | None:
+    """Python twin of COUNTS_AS_SPEND, for code that buckets rows itself: "spend"
+    (amount adds to spending; negative = refund), "income", or None (neither)."""
+    if category in NON_SPEND_CATEGORIES:
+        return "income" if category == "Income" else None
+    if amount < 0 and category in (None, "Uncategorized"):
+        return "income"
+    return "spend"
+
 
 # Group by this, not the raw column: NULL and the literal "Uncategorized" (which
 # sync and imports write) are the same bucket. Grouped separately they produce two
@@ -151,16 +175,17 @@ def spending_summary(
 ):
     since = date.today() - timedelta(days=period)
 
-    # Spending only: Plaid uses positive amounts for money leaving the account,
-    # and we exclude Income/Transfers from "spent".
-    spend_filter = (
-        Transaction.date >= since,
-        Transaction.amount > 0,
-        IS_SPEND_CATEGORY,
-    )
+    # Spending net of refunds (see COUNTS_AS_SPEND). Plaid uses positive amounts
+    # for money leaving the account; Income/Transfers are never spending.
+    spend_filter = (Transaction.date >= since, COUNTS_AS_SPEND)
 
     total = db.query(func.coalesce(func.sum(Transaction.amount), 0.0)).filter(*spend_filter).scalar()
-    count = db.query(func.count(Transaction.id)).filter(*spend_filter).scalar()
+    # Purchases, not refunds: "12 transactions" means 12 things bought.
+    count = (
+        db.query(func.count(Transaction.id))
+        .filter(*spend_filter, Transaction.amount > 0)
+        .scalar()
+    )
 
     rows = (
         db.query(
@@ -170,6 +195,8 @@ def spending_summary(
         )
         .filter(*spend_filter)
         .group_by(CATEGORY_LABEL)
+        # A category refunded down to nothing has no slice to show.
+        .having(func.sum(Transaction.amount) > 0)
         .order_by(func.sum(Transaction.amount).desc())
         .all()
     )
@@ -189,7 +216,10 @@ def spending_summary(
 def list_accounts(db: Session = Depends(get_db)):
     return [
         AccountOut.model_validate(a).model_copy(
-            update={"institution_name": a.item.institution_name if a.item else None}
+            update={
+                "institution_name": a.item.institution_name if a.item else None,
+                "item_error": a.item.last_error_code if a.item else None,
+            }
         )
         # Ordered so the list is stable between renders — and so duplicates left
         # by an older re-link appear oldest-first, which is the one to remove.
@@ -230,9 +260,13 @@ def delete_account(account_id: int, db: Session = Depends(get_db)):
     db.delete(account)  # cascades holdings / investment txns
     db.flush()
 
+    removed_token = None
     if item is not None and not item.accounts:
+        removed_token = item.access_token
         db.delete(item)
     db.commit()
+    if removed_token:
+        remove_item(get_plaid_client(), removed_token)
 
 
 @router.get("/spending-trend", response_model=list[TrendPoint])
@@ -252,17 +286,14 @@ def spending_trend(
     spent: dict[date, float] = defaultdict(float)
     income: dict[date, float] = defaultdict(float)
     for txn_date, amount, category in txns:
-        if category == "Transfers":
-            # Money moving between your own accounts is neither. Counting it would
-            # double-book every credit-card payment: once as income on the card,
-            # once as spending from the chequing account that paid it.
-            continue
+        # Same rules as every other endpoint: Transfers are neither (counting them
+        # would double-book card payments), refunds reduce spending.
+        kind = spend_or_income(category, amount)
         bucket = _bucket_start(txn_date, granularity)
-        if category == "Income" or amount < 0:
-            # Income category, or a credit (negative = money in) in any bucket.
-            income[bucket] += -amount if amount < 0 else amount
-        else:
+        if kind == "spend":
             spent[bucket] += amount
+        elif kind == "income":
+            income[bucket] += -amount
 
     buckets = sorted(set(spent) | set(income))
     return [
@@ -286,12 +317,9 @@ def top_merchants(
     label = func.coalesce(Transaction.merchant_name, Transaction.name, "Unknown")
     rows = (
         db.query(label, func.sum(Transaction.amount), func.count(Transaction.id))
-        .filter(
-            Transaction.date >= since,
-            Transaction.amount > 0,
-            IS_SPEND_CATEGORY,
-        )
+        .filter(Transaction.date >= since, COUNTS_AS_SPEND)
         .group_by(label)
+        .having(func.sum(Transaction.amount) > 0)
         .order_by(func.sum(Transaction.amount).desc())
         .limit(limit)
         .all()
@@ -317,8 +345,7 @@ def category_comparison(
             .filter(
                 Transaction.date >= start,
                 Transaction.date < end,
-                Transaction.amount > 0,
-                IS_SPEND_CATEGORY,
+                COUNTS_AS_SPEND,
             )
             .group_by(CATEGORY_LABEL)
             .all()

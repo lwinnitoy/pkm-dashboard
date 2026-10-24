@@ -1,6 +1,7 @@
 """Balance snapshotting: refresh live balances from Plaid, then persist one
 point-in-time row per account per day. Used by the daily scheduler job and safe
 to call ad hoc (idempotent per account/day)."""
+import logging
 from datetime import date
 
 from plaid.model.accounts_get_request import AccountsGetRequest
@@ -8,7 +9,9 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models import Account, BalanceSnapshot, PlaidItem
-from app.plaid_client import get_plaid_client
+from app.plaid_client import get_plaid_client, skipped_item
+
+logger = logging.getLogger(__name__)
 
 
 def apply_balances(db: Session, plaid_accounts) -> list[Account]:
@@ -36,8 +39,15 @@ def refresh_balances(db: Session) -> None:
     for item in db.query(PlaidItem).all():
         try:
             resp = client.accounts_get(AccountsGetRequest(access_token=item.access_token))
-        except Exception:
-            # A single failing item shouldn't abort the whole snapshot run.
+        except Exception as exc:
+            # A single failing item shouldn't abort the whole snapshot run, but it
+            # must be visible: its accounts keep yesterday's balance in today's
+            # snapshot until it's fixed (usually a re-link).
+            entry = skipped_item(item, exc)
+            logger.warning(
+                "balance refresh skipped %s: %s", entry["institution"], entry["error_code"]
+            )
+            item.record_error(entry["error_code"])
             continue
         apply_balances(db, resp.accounts)
 

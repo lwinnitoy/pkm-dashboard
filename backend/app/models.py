@@ -8,6 +8,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -43,11 +44,21 @@ class PlaidItem(Base):
     institution_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
     institution_name: Mapped[str | None] = mapped_column(String, nullable=True)
     transactions_cursor: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Why the last sync or balance refresh couldn't reach this login (Plaid's error
+    # code, e.g. ITEM_LOGIN_REQUIRED), cleared by the next successful sync. Lets the
+    # Accounts page offer "Reconnect" on the right bank.
+    last_error_code: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_error_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     accounts: Mapped[list["Account"]] = relationship(
         back_populates="item", cascade="all, delete-orphan"
     )
+
+    def record_error(self, code: str | None) -> None:
+        """Note (or, with None, clear) why this login last failed."""
+        self.last_error_code = code
+        self.last_error_at = _utcnow() if code else None
 
 
 class Account(Base):
@@ -92,12 +103,17 @@ class Account(Base):
 
 class Transaction(Base):
     __tablename__ = "transactions"
+    # Per-account date ranges are the common lookup: deleting an account, rolling
+    # a manual balance forward, import reconciliation and coverage.
+    __table_args__ = (Index("ix_transactions_account_id_date", "account_id", "date"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"))
-    # Exactly one identity is set, per `source`: Plaid rows carry a Plaid id, manual
-    # rows carry a fingerprint. Both are unique, so re-importing an overlapping
-    # statement period is idempotent at the DB level, not just in the reconciler.
+    # One identity per `source`: Plaid rows carry a Plaid id, manual rows carry a
+    # fingerprint. Both are unique, so re-importing an overlapping statement period
+    # is idempotent at the DB level, not just in the reconciler. The exception is a
+    # Plaid row detached by a re-link (no id) until the new Item's copy adopts it;
+    # one older than the new Item's history stays detached for good.
     plaid_transaction_id: Mapped[str | None] = mapped_column(
         String, unique=True, index=True, nullable=True
     )
@@ -224,7 +240,7 @@ class InvestmentTransaction(Base):
     __tablename__ = "investment_transactions"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"))
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
     security_id: Mapped[int | None] = mapped_column(
         ForeignKey("securities.id"), nullable=True
     )

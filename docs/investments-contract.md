@@ -1,13 +1,15 @@
 # Investments integration contract
 
-Two worktrees touch investment data:
+Two sides touch investment data:
 
-- **`feature/dashboard`** (this branch) — consumes portfolio value for the
-  retirement-goal projection and the net-worth chart.
-- **Wealthsimple worktree** — produces portfolio value by syncing holdings.
+- **Producer:** the investments module (`app/investments/`, `routers/investments.py`)
+  syncs holdings from Plaid and values them.
+- **Consumer:** the finance code, whose retirement-goal projection needs the
+  portfolio value.
 
-To let both branches build in parallel and merge cleanly, they agree on a single
-narrow seam. Neither side imports anything else across the boundary.
+They meet at a single narrow seam. The finance side imports nothing else across the
+boundary, so either side can change its internals freely. (It began as the contract
+that let the two be built in parallel branches.)
 
 ## The seam
 
@@ -20,8 +22,8 @@ def get_portfolio_value(db: Session) -> float | None:
     Returns None when no investment source is linked."""
 ```
 
-- **Owner:** the Wealthsimple worktree replaces the stub with the real query.
-- **Consumer:** `feature/dashboard` imports **only** this function.
+- **Owner:** the investments module, which implements it.
+- **Consumer:** the goals endpoint in `routers/finance.py` imports **only** this function.
 - **Contract:** signature and return semantics above are frozen. Returning
   `None` (not `0.0`) means "no investments linked" (no investment accounts and
   no holdings) so the UI can show an empty state instead of a misleading zero
@@ -45,7 +47,7 @@ Wealthsimple reports every holding's institution price as 0 while the account
 balance is correct. `/api/investments/portfolio`'s `total_value` is computed by
 the same `value_portfolio()` call, so the endpoint and the seam can't drift.
 
-## Consumers on this branch
+## Consumers
 
 - `app/routers/finance.py` → `net-worth` does **not** add portfolio value.
   Balance snapshots already carry every account's `current_balance`, investment
@@ -53,10 +55,3 @@ the same `value_portfolio()` call, so the endpoint and the seam can't drift.
   on the latest point. It stayed hidden only while holdings were valued at 0.
 - `app/routers/finance.py` → `goals` projection uses it as the retirement
   goal's `current_value`; falls back to a "connect investments" state when None.
-
-## Merge notes
-
-The Wealthsimple branch will add its own models/router; it should keep them under
-`app/investments/` and register its router in `app/main.py`. The only file both
-branches edit is `main.py` (router registration) — keep those additions on
-separate lines to minimize conflicts.

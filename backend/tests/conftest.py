@@ -3,7 +3,9 @@
 Sets up a hermetic environment BEFORE the app is imported:
 - a freshly generated Fernet key so ``app.crypto`` can encrypt/decrypt, and
 - a throwaway on-disk SQLite ``DATABASE_URL`` so importing ``app.database`` never
-  touches the developer's real ``pkm.db``.
+  touches the developer's real ``pkm.db``, and
+- settings that ignore ``backend/.env``, so a local password or Plaid config
+  can't change what the tests see.
 
 Each test gets an isolated in-memory SQLite database (shared across connections
 via a StaticPool) with all tables created, wired into the app through
@@ -31,6 +33,12 @@ os.environ["SECRET_ENCRYPTION_KEY"] = Fernet.generate_key().decode()
 _IMPORT_DB = os.path.join(tempfile.mkdtemp(prefix="pkm-tests-"), "import.db")
 os.environ["DATABASE_URL"] = f"sqlite:///{_IMPORT_DB}"
 
+import app.config  # noqa: E402
+
+# Never read the developer's backend/.env: run from backend/ (as documented), its
+# APP_PASSWORD turned auth on and its PLAID_* values leaked into every test.
+app.config.Settings.model_config["env_file"] = None
+
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import create_engine, event  # noqa: E402
@@ -40,6 +48,16 @@ from sqlalchemy.pool import StaticPool  # noqa: E402
 import app.main as app_main  # noqa: E402
 from app.database import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _fresh_login_throttle():
+    """Failed-login counts are process-wide; don't let one test's lock out another."""
+    from app.auth import login_throttle
+
+    login_throttle.reset()
+    yield
+    login_throttle.reset()
 
 
 @pytest.fixture(autouse=True)

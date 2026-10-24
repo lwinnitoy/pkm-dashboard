@@ -2,7 +2,12 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+class LinkTokenRequest(BaseModel):
+    # Set to repair an existing login (Plaid "update mode"): same Item, same ids.
+    item_id: int | None = None
 
 
 class LinkTokenResponse(BaseModel):
@@ -17,10 +22,19 @@ class ExchangeTokenRequest(BaseModel):
     institution_id: str | None = None
 
 
+class SkippedItem(BaseModel):
+    institution: str
+    error_code: str  # Plaid's code, e.g. PRODUCTS_NOT_SUPPORTED / ITEM_LOGIN_REQUIRED
+    message: str
+
+
 class SyncResponse(BaseModel):
     added: int
     modified: int
     removed: int
+    # Banks that couldn't be synced this time (e.g. ITEM_LOGIN_REQUIRED), and why.
+    items_skipped: int = 0
+    skipped_details: list[SkippedItem] = []
 
 
 class AccountOut(BaseModel):
@@ -38,6 +52,10 @@ class AccountOut(BaseModel):
     # Which linked login this belongs to — the way to tell two identically-named
     # accounts apart when an institution has been linked more than once.
     institution_name: str | None = None
+    # The linked login (PlaidItem.id) this belongs to, and why its last sync failed
+    # (e.g. ITEM_LOGIN_REQUIRED), so the UI can offer to reconnect it.
+    plaid_item_id: int | None = None
+    item_error: str | None = None
     # Manual accounts: the date the owner's entered balance was true as of (later
     # imports roll it forward). None for Plaid accounts.
     balance_anchor_date: date | None = None
@@ -115,12 +133,6 @@ class SummaryResponse(BaseModel):
 
 
 # ---- Investments ----
-
-
-class SkippedItem(BaseModel):
-    institution: str
-    error_code: str  # Plaid's code, e.g. PRODUCTS_NOT_SUPPORTED / ITEM_LOGIN_REQUIRED
-    message: str
 
 
 class InvestmentsSyncResponse(BaseModel):
@@ -318,17 +330,24 @@ class AccountCoverageOut(BaseModel):
     account_id: int
     account_name: str | None
     account_type: str | None
+    # Tells Savings from Chequing (both "depository") in the Import page's picker.
+    account_subtype: str | None = None
     source: str
     covered: list[DateRangeOut]
     gaps: list[DateRangeOut]
     last_imported_period_end: date | None
 
 
+# An annual return of -100% or worse has no monthly equivalent (the projection
+# takes a 12th root of 1 + r), so it would 500 every goals request, not just one.
+_ANNUAL_RETURN = dict(gt=-1.0, le=1.0)
+
+
 class GoalCreate(BaseModel):
     name: str
     target_amount: float
     target_date: date
-    expected_annual_return: float = 0.06
+    expected_annual_return: float = Field(0.06, **_ANNUAL_RETURN)
     monthly_contribution: float = 0.0
 
 
@@ -336,7 +355,7 @@ class GoalUpdate(BaseModel):
     name: str | None = None
     target_amount: float | None = None
     target_date: date | None = None
-    expected_annual_return: float | None = None
+    expected_annual_return: float | None = Field(None, **_ANNUAL_RETURN)
     monthly_contribution: float | None = None
 
 
@@ -367,6 +386,14 @@ SLUG = r"^[a-z0-9]+(?:-[a-z0-9]+)*$"
 class InsightSource(BaseModel):
     title: str
     url: str
+
+    @field_validator("url")
+    @classmethod
+    def _web_link(cls, url: str) -> str:
+        # Rendered as a link, so a javascript: or data: URL would run on click.
+        if not url.lower().startswith(("https://", "http://")):
+            raise ValueError("source links must be http(s) URLs")
+        return url
 
 
 class InsightContent(BaseModel):

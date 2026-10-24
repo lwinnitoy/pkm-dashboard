@@ -7,7 +7,8 @@ import { cashFlowTotals, netWorthChange, savingsRate } from "../lib/derive";
 import { currency, currencyWhole, percent } from "../lib/format";
 
 export default function Overview() {
-  const { netWorth, trend, summary, transactions, portfolio, loading } = useFinance();
+  const { netWorth, trend, summary, transactions, portfolio, portfolioError, loading } =
+    useFinance();
 
   const nw = netWorthChange(netWorth);
   const { income, spending } = cashFlowTotals(trend);
@@ -55,6 +56,8 @@ export default function Overview() {
             />
           ) : loading ? (
             <EmptyState>Loading…</EmptyState>
+          ) : portfolioError ? (
+            <EmptyState>Couldn't load investments: {portfolioError}</EmptyState>
           ) : (
             <EmptyState>
               No investments linked. <Link to="/accounts">Connect an account</Link>.
@@ -65,10 +68,10 @@ export default function Overview() {
 
       <div className="grid grid-3">
         <Card>
-          <MetricTile label="Income" value={currency(income)} foot="money in, this range" />
+          <MetricTile label="Income" value={currency(income)} foot="earned, this range (not transfers)" />
         </Card>
         <Card>
-          <MetricTile label="Spending" value={currency(spending)} foot="money out, this range" />
+          <MetricTile label="Spending" value={currency(spending)} foot="spent, net of refunds" />
         </Card>
         <Card>
           <MetricTile

@@ -24,7 +24,14 @@ def _account(account_id, name="Checking", type_="depository", balance=100.0):
     )
 
 
-def _txn(txn_id, account_id, amount, name="Coffee", category="FOOD_AND_DRINK"):
+def _counts(resp):
+    body = resp.json()
+    return {k: body[k] for k in ("added", "modified", "removed")}
+
+
+def _txn(
+    txn_id, account_id, amount, name="Coffee", category="FOOD_AND_DRINK", detailed=None, pending=False
+):
     return SimpleNamespace(
         transaction_id=txn_id,
         account_id=account_id,
@@ -33,8 +40,8 @@ def _txn(txn_id, account_id, amount, name="Coffee", category="FOOD_AND_DRINK"):
         merchant_name=name,
         amount=amount,
         iso_currency_code="USD",
-        personal_finance_category=SimpleNamespace(primary=category),
-        pending=False,
+        personal_finance_category=SimpleNamespace(primary=category, detailed=detailed),
+        pending=pending,
     )
 
 
@@ -47,6 +54,7 @@ class FakePlaidClient:
         self._accounts = accounts if accounts is not None else [_account("acct-1")]
         # cursor -> page. ``None`` (no cursor) is the first page.
         self.sync_pages: dict = {}
+        self.removed_tokens: list[str] = []
 
     def item_public_token_exchange(self, request):
         return SimpleNamespace(access_token=self.access_token, item_id=self.item_id)
@@ -56,7 +64,17 @@ class FakePlaidClient:
 
     def transactions_sync(self, request):
         cursor = getattr(request, "cursor", None)
-        return self.sync_pages[cursor]
+        page = self.sync_pages[cursor]
+        if isinstance(page, Exception):
+            raise page
+        return page
+
+    def item_remove(self, request):
+        self.removed_tokens.append(request.access_token)
+
+    def link_token_create(self, request):
+        self.link_request = request
+        return SimpleNamespace(link_token="link-sandbox-123")
 
 
 def _sync_page(*, added=(), modified=(), removed=(), next_cursor, has_more=False):
@@ -138,7 +156,7 @@ def test_sync_applies_added_modified_removed_and_advances_cursor(
     }
     resp = client.post("/api/plaid/sync")
     assert resp.status_code == 200
-    assert resp.json() == {"added": 2, "modified": 0, "removed": 0}
+    assert _counts(resp) == {"added": 2, "modified": 0, "removed": 0}
     assert db_session.query(Transaction).count() == 2
 
     item = db_session.query(PlaidItem).one()
@@ -155,7 +173,7 @@ def test_sync_applies_added_modified_removed_and_advances_cursor(
         )
     }
     resp = client.post("/api/plaid/sync")
-    assert resp.json() == {"added": 0, "modified": 1, "removed": 1}
+    assert _counts(resp) == {"added": 0, "modified": 1, "removed": 1}
 
     txns = db_session.query(Transaction).all()
     assert len(txns) == 1  # t2 removed
@@ -206,3 +224,183 @@ def test_sync_refreshes_balances_from_the_sync_response(client, fake_client, db_
     assert db_session.get(Account, acct.id).current_balance == 321.0
     snap = db_session.query(BalanceSnapshot).filter_by(account_id=acct.id, date=date.today()).one()
     assert snap.balance == 321.0
+
+
+# --------------------------------------------------------------------------- #
+# one bank failing doesn't stop the others                                     #
+# --------------------------------------------------------------------------- #
+def _api_error(code):
+    from plaid.exceptions import ApiException
+
+    exc = ApiException(status=400, reason="Bad Request")
+    exc.body = '{"error_code": "%s", "error_message": "nope"}' % code
+    return exc
+
+
+class PerItemSyncClient(FakePlaidClient):
+    """Sync pages keyed by (access_token, cursor), so items can behave differently."""
+
+    def transactions_sync(self, request):
+        page = self.sync_pages[(request.access_token, getattr(request, "cursor", None))]
+        if isinstance(page, list):  # a sequence of responses, one per call
+            page = page.pop(0)
+        if isinstance(page, Exception):
+            raise page
+        return page
+
+
+@pytest.fixture()
+def per_item_client(monkeypatch):
+    client = PerItemSyncClient()
+    monkeypatch.setattr(plaid_router, "get_plaid_client", lambda: client)
+    return client
+
+
+def test_a_bank_needing_relogin_is_skipped_not_fatal(client, per_item_client, db_session):
+    from app.models import BalanceSnapshot
+    from tests.factories import make_account, make_item
+
+    broken = make_item(db_session, item_id="broken", name="Broken Bank")
+    good = make_item(db_session, item_id="good", name="Good Bank")
+    make_account(db_session, item=broken, plaid_account_id="acct-b", current_balance=5.0)
+    make_account(db_session, item=good, plaid_account_id="acct-g", current_balance=7.0)
+    db_session.commit()
+    per_item_client.sync_pages = {
+        ("tok-broken", None): _api_error("ITEM_LOGIN_REQUIRED"),
+        ("tok-good", None): _sync_page(added=[_txn("t1", "acct-g", 4.0)], next_cursor="g1"),
+    }
+
+    resp = client.post("/api/plaid/sync")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["added"] == 1
+    assert body["items_skipped"] == 1
+    assert body["skipped_details"][0]["institution"] == "Broken Bank"
+    assert body["skipped_details"][0]["error_code"] == "ITEM_LOGIN_REQUIRED"
+    db_session.expire_all()
+    assert db_session.get(PlaidItem, broken.id).transactions_cursor is None  # untouched
+    assert db_session.get(PlaidItem, good.id).transactions_cursor == "g1"
+    # The day's snapshot is still written for every account.
+    assert db_session.query(BalanceSnapshot).count() == 2
+
+
+def test_mutation_during_pagination_restarts_from_the_saved_cursor(
+    client, per_item_client, db_session
+):
+    from tests.factories import make_account, make_item
+
+    item = make_item(db_session, item_id="bank")
+    make_account(db_session, item=item, plaid_account_id="acct-1")
+    db_session.commit()
+    per_item_client.sync_pages = {
+        # First walk: page one succeeds, page two hits the mutation error.
+        ("tok-bank", None): [
+            _sync_page(added=[_txn("t1", "acct-1", 1.0)], next_cursor="c1", has_more=True),
+            _sync_page(added=[_txn("t1", "acct-1", 1.0)], next_cursor="c1", has_more=True),
+        ],
+        ("tok-bank", "c1"): [
+            _api_error("TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION"),
+            _sync_page(added=[_txn("t2", "acct-1", 2.0)], next_cursor="c2"),
+        ],
+    }
+
+    resp = client.post("/api/plaid/sync")
+
+    assert resp.json()["added"] == 2  # the aborted first walk wasn't double-counted
+    assert resp.json()["items_skipped"] == 0
+    assert {t.plaid_transaction_id for t in db_session.query(Transaction)} == {"t1", "t2"}
+
+
+def test_a_later_page_can_modify_a_row_an_earlier_page_added(client, fake_client, db_session):
+    client.post("/api/plaid/exchange-token", json={"public_token": "public-abc"})
+    fake_client.sync_pages = {
+        None: _sync_page(added=[_txn("t1", "acct-1", 1.0)], next_cursor="c1", has_more=True),
+        "c1": _sync_page(modified=[_txn("t1", "acct-1", 3.0)], next_cursor="c2"),
+    }
+
+    assert client.post("/api/plaid/sync").status_code == 200
+
+    assert db_session.query(Transaction).one().amount == 3.0
+
+
+def test_card_payments_sync_as_transfers_not_spending(client, fake_client, db_session):
+    client.post("/api/plaid/exchange-token", json={"public_token": "public-abc"})
+    fake_client.sync_pages = {
+        None: _sync_page(
+            added=[
+                _txn("pay", "acct-1", 500.0, name="CREDIT CARD PAYMENT", category="LOAN_PAYMENTS",
+                     detailed="LOAN_PAYMENTS_CREDIT_CARD_PAYMENT"),
+                _txn("groc", "acct-1", 80.0, name="SAFEWAY", category="FOOD_AND_DRINK",
+                     detailed="FOOD_AND_DRINK_GROCERIES"),
+            ],
+            next_cursor="c1",
+        )
+    }
+    client.post("/api/plaid/sync")
+
+    by_id = {t.plaid_transaction_id: t for t in db_session.query(Transaction)}
+    assert by_id["pay"].category == "Transfers"
+    assert by_id["groc"].category == "Groceries"
+    summary = client.get("/api/finance/summary").json()
+    assert summary["total_spent"] == 80.0
+
+
+
+# --------------------------------------------------------------------------- #
+# a bank's health, and repairing it in update mode                             #
+# --------------------------------------------------------------------------- #
+def test_a_failing_bank_is_flagged_until_it_syncs_again(client, per_item_client, db_session):
+    from tests.factories import make_account, make_item
+
+    bank = make_item(db_session, item_id="bank", name="RBC")
+    make_account(db_session, item=bank, plaid_account_id="acct-1")
+    db_session.commit()
+    per_item_client.sync_pages = {("tok-bank", None): _api_error("ITEM_LOGIN_REQUIRED")}
+
+    client.post("/api/plaid/sync")
+
+    [account] = client.get("/api/finance/accounts").json()
+    assert account["item_error"] == "ITEM_LOGIN_REQUIRED"
+    assert account["plaid_item_id"] == bank.id
+
+    per_item_client.sync_pages = {("tok-bank", None): _sync_page(next_cursor="c1")}
+    client.post("/api/plaid/sync")
+
+    assert client.get("/api/finance/accounts").json()[0]["item_error"] is None
+
+
+def test_update_mode_link_token_reuses_the_items_access_token(client, fake_client, db_session):
+    from tests.factories import make_item
+
+    item = make_item(db_session, item_id="bank")
+    db_session.commit()
+
+    resp = client.post("/api/plaid/create-link-token", json={"item_id": item.id})
+
+    assert resp.status_code == 200
+    assert fake_client.link_request.access_token == "tok-bank"
+    assert "products" not in fake_client.link_request.to_dict()
+
+
+def test_a_new_link_token_asks_for_products(client, fake_client):
+    assert client.post("/api/plaid/create-link-token").status_code == 200
+    assert fake_client.link_request.to_dict()["products"] == ["transactions"]
+    assert "access_token" not in fake_client.link_request.to_dict()
+
+
+def test_update_mode_for_an_unknown_item_is_404(client, fake_client):
+    assert client.post("/api/plaid/create-link-token", json={"item_id": 999}).status_code == 404
+
+
+def test_a_failed_account_fetch_releases_the_new_item(client, fake_client, db_session):
+    def boom(request):
+        raise RuntimeError("plaid down")
+
+    fake_client.accounts_get = boom
+
+    resp = client.post("/api/plaid/exchange-token", json={"public_token": "public-abc"})
+
+    assert resp.status_code == 502
+    assert fake_client.removed_tokens == ["access-xyz"]
+    assert db_session.query(PlaidItem).count() == 0

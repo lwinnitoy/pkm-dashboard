@@ -50,6 +50,10 @@ export interface Account {
   source: string;
   mask: string | null;
   institution_name: string | null;
+  // The linked login this account belongs to, and why it last failed to sync
+  // (e.g. "ITEM_LOGIN_REQUIRED"); null for manual accounts or a healthy login.
+  plaid_item_id: number | null;
+  item_error: string | null;
   // Manual accounts: the date the entered balance was true on; imports after it
   // roll the balance forward. Null for Plaid accounts.
   balance_anchor_date: string | null;
@@ -249,6 +253,7 @@ export interface AccountCoverage {
   account_id: number;
   account_name: string | null;
   account_type: string | null;
+  account_subtype: string | null;
   source: string;
   covered: DateRange[];
   gaps: DateRange[];
@@ -279,16 +284,55 @@ export interface Insight {
   updated_at: string; // naive UTC timestamp
 }
 
+/** A bank a sync couldn't complete, with Plaid's reason (e.g. ITEM_LOGIN_REQUIRED). */
+export interface SkippedItem {
+  institution: string;
+  error_code: string;
+  message: string;
+}
+
+/** A caught error as text for the UI. */
+export function errorText(e: unknown): string {
+  // fetch rejects with a bare TypeError ("Failed to fetch") when nothing answers.
+  if (e instanceof TypeError) return `Can't reach the server (${e.message}).`;
+  return e instanceof Error ? e.message : String(e);
+}
+
+/** FastAPI's `detail`: a sentence for HTTPException, a list of field errors for a 422. */
+function describeError(body: string, res: Response): string {
+  try {
+    const { detail } = JSON.parse(body) as { detail?: unknown };
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail)) {
+      return detail
+        .map((d: { loc?: unknown[]; msg?: string }) =>
+          [d.loc?.filter((l) => l !== "body").join("."), d.msg].filter(Boolean).join(": "),
+        )
+        .join("; ");
+    }
+  } catch {
+    // Not JSON (a proxy error page, say); fall through to the status line.
+  }
+  return `${res.status} ${res.statusText}`.trim();
+}
+
+// A dashboard refresh fires ~10 requests at once; an expired token should reload
+// the page once, not once per request.
+let reloading = false;
+
 async function handle<T>(res: Response): Promise<T> {
   if (res.status === 401) {
     // Token missing/expired — drop it and bounce back to the login screen.
     clearToken();
-    window.location.reload();
-    throw new Error("Unauthorized");
+    if (!reloading) {
+      reloading = true;
+      window.location.reload();
+    }
+    throw new Error("Your session expired. Signing in again…");
   }
   if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw new Error(`${res.status} ${res.statusText}: ${detail}`);
+    const body = await res.text().catch(() => "");
+    throw new Error(describeError(body, res));
   }
   // DELETEs answer 204 with no body; parsing it would throw after the request
   // had already succeeded.
@@ -343,14 +387,24 @@ export const api = {
       body: JSON.stringify({ password }),
     });
     if (!res.ok) {
-      throw new Error(res.status === 401 ? "Incorrect password" : `Login failed (${res.status})`);
+      if (res.status === 401) throw new Error("Incorrect password");
+      if (res.status === 429) {
+        const minutes = Math.ceil(Number(res.headers.get("Retry-After") ?? 60) / 60);
+        throw new Error(`Too many wrong passwords. Try again in ${minutes} min.`);
+      }
+      throw new Error(`Login failed (${res.status})`);
     }
     const { token } = (await res.json()) as { token: string };
     setToken(token);
   },
 
-  createLinkToken: () =>
-    req<{ link_token: string }>("/api/plaid/create-link-token", { method: "POST" }),
+  /** A token for linking a new bank, or with `itemId`, for repairing that login
+   * in place (Plaid update mode). */
+  createLinkToken: (itemId?: number) =>
+    req<{ link_token: string }>("/api/plaid/create-link-token", {
+      method: "POST",
+      ...(itemId != null ? { body: JSON.stringify({ item_id: itemId }) } : {}),
+    }),
 
   exchangeToken: (
     public_token: string,
@@ -363,16 +417,20 @@ export const api = {
     }),
 
   sync: () =>
-    req<{ added: number; modified: number; removed: number }>("/api/plaid/sync", {
-      method: "POST",
-    }),
+    req<{
+      added: number;
+      modified: number;
+      removed: number;
+      items_skipped: number;
+      skipped_details: SkippedItem[];
+    }>("/api/plaid/sync", { method: "POST" }),
 
   investmentsSync: () =>
     req<{
       items_synced: number;
       items_skipped: number;
       holdings: number;
-      skipped_details: { institution: string; error_code: string; message: string }[];
+      skipped_details: SkippedItem[];
     }>("/api/investments/sync", { method: "POST" }),
 
   transactions: (limit = 50, offset = 0, filters: TransactionFilters = {}) => {

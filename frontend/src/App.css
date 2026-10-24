@@ -251,9 +251,6 @@
 .grid-3 {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
-.grid-4 {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
 /* A donut + legend card beside a plain list: 2:1 gives the legend half of the
    wide card the same text width as the list, so the two come out about as tall. */
 .grid-2-1 {
@@ -263,8 +260,7 @@
   grid-column: span 2;
 }
 @media (max-width: 1100px) {
-  .grid-3,
-  .grid-4 {
+  .grid-3 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .grid-2-1 {
@@ -291,7 +287,6 @@
   }
   .grid-2,
   .grid-3,
-  .grid-4,
   .span-2 {
     grid-template-columns: 1fr;
     grid-column: auto;
@@ -411,6 +406,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
   padding: 12px 0;
   border-bottom: 1px solid var(--border);
 }
@@ -481,10 +478,19 @@
   font-size: 0.82rem;
   color: var(--text-muted);
 }
+.chip-warn {
+  color: var(--warning);
+  font-weight: 600;
+}
 
 /* ============================================================
    Tables
    ============================================================ */
+/* Wide tables scroll sideways on a phone instead of stretching the page. */
+.table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
 .table {
   width: 100%;
   border-collapse: collapse;
@@ -666,7 +672,8 @@
 }
 .month-totals {
   display: flex;
-  gap: 32px;
+  flex-wrap: wrap;
+  gap: 16px 32px;
 }
 
 .budget-row {

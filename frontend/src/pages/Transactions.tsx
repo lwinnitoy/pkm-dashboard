@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, type Account, type Transaction, type TransactionFilters } from "../api/client";
+import {
+  api,
+  errorText,
+  type Account,
+  type Transaction,
+  type TransactionFilters,
+} from "../api/client";
 import TransactionsTable from "../components/TransactionsTable";
 import { Card, EmptyState } from "../components/ui";
 import { useFinance } from "../data/financeContext";
@@ -82,7 +88,7 @@ export default function Transactions() {
         setTotal(matching.total);
         setAnyAtAll(any);
       } catch (e) {
-        if (gen === generation.current) setError(String(e));
+        if (gen === generation.current) setError(errorText(e));
       } finally {
         if (gen === generation.current) setLoading(false);
       }
@@ -107,7 +113,7 @@ export default function Transactions() {
         return [...(prev ?? []), ...next.filter((t) => !shown.has(t.id))];
       });
     } catch (e) {
-      if (gen === generation.current) setError(String(e));
+      if (gen === generation.current) setError(errorText(e));
     } finally {
       setLoadingMore(false);
     }
@@ -121,7 +127,7 @@ export default function Transactions() {
       await api.recategorize(id, picked);
     } catch (e) {
       await reload(depth); // undo the optimistic pick
-      setError(`Couldn't recategorize: ${e instanceof Error ? e.message : String(e)}`);
+      setError(`Couldn't recategorize: ${errorText(e)}`);
       return;
     }
     // The pick became a merchant rule that can move other rows too, both here

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Budget, Transaction
-from app.routers.finance import CATEGORY_LABEL, IS_SPEND_CATEGORY
+from app.routers.finance import CATEGORY_LABEL, COUNTS_AS_SPEND
 from app.schemas import BudgetCreate, BudgetOut, BudgetStatus, BudgetStatusItem, BudgetUpdate
 
 router = APIRouter(prefix="/api/finance/budgets", tags=["budgets"])
@@ -48,7 +48,12 @@ def update_budget(budget_id: int, payload: BudgetUpdate, db: Session = Depends(g
     budget = db.get(Budget, budget_id)
     if budget is None:
         raise HTTPException(status_code=404, detail="Budget not found")
-    for key, val in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    category = changes.get("category")
+    if category and category != budget.category:
+        if db.query(Budget).filter_by(category=category).first() is not None:
+            raise HTTPException(status_code=409, detail=f"{category} already has a budget")
+    for key, val in changes.items():
         setattr(budget, key, val)
     db.commit()
     db.refresh(budget)
@@ -79,8 +84,7 @@ def budget_status(
         .filter(
             Transaction.date >= start,
             Transaction.date < end,
-            Transaction.amount > 0,
-            IS_SPEND_CATEGORY,
+            COUNTS_AS_SPEND,  # net of refunds
         )
         .group_by(CATEGORY_LABEL)
         .all()
@@ -106,7 +110,8 @@ def budget_status(
 
     budgeted = {b.category for b in budgets}
     for cat, spent in spent_by_cat.items():
-        if cat not in budgeted:
+        # Skip a category refunded down to nothing: there's nothing to budget.
+        if cat not in budgeted and spent > 0:
             items.append(
                 BudgetStatusItem(
                     budget_id=None, category=cat, limit=None, spent=spent,

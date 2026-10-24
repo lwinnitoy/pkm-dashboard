@@ -24,19 +24,20 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
     <div className="login-screen">
       <form className="login-card" onSubmit={submit}>
         <div className="sidebar-logo" />
-        <h1>Finances</h1>
+        <h1>Ledger</h1>
         <p className="muted">Enter your password to continue.</p>
         <input
           type="password"
           value={password}
           autoFocus
           placeholder="Password"
+          aria-label="Password"
           onChange={(e) => setPassword(e.target.value)}
         />
         <button className="btn" type="submit" disabled={busy || !password}>
           {busy ? "Signing in…" : "Sign in"}
         </button>
-        {error && <div className="error">{error}</div>}
+        {error && <div className="error" role="alert">{error}</div>}
       </form>
     </div>
   );

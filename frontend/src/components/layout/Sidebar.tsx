@@ -7,7 +7,7 @@ export default function Sidebar() {
     <aside className="sidebar">
       <div className="sidebar-brand">
         <span className="sidebar-logo" />
-        Finances
+        Ledger
       </div>
 
       {NAV.map((item) => (

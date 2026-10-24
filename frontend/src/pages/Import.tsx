@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   AccountCoverage,
   DateRange,
@@ -8,7 +8,7 @@ import type {
   ImportResult,
   ImportRow,
 } from "../api/client";
-import { api } from "../api/client";
+import { api, errorText } from "../api/client";
 import { Card, EmptyState } from "../components/ui";
 import { useFinance } from "../data/financeContext";
 import { currency, longDate } from "../lib/format";
@@ -23,6 +23,11 @@ const ACCOUNT_KINDS = [
   { key: "credit", label: "Credit card", type: "credit", subtype: "credit card" },
   { key: "loan", label: "Loan", type: "loan", subtype: null },
 ] as const;
+
+/** Statement amount in the Transactions table's style: money in carries a "+". */
+function signedAmount(amount: number): string {
+  return `${amount < 0 ? "+" : ""}${currency(Math.abs(amount))}`;
+}
 
 function rangeLabel(r: DateRange): string {
   return `${longDate(r.start)} – ${longDate(r.end)}`;
@@ -43,39 +48,42 @@ function GapList({ gaps }: { gaps: DateRange[] }) {
 
 function RowTable({ rows }: { rows: ImportRow[] }) {
   return (
-    <table className="table">
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Description</th>
-          <th className="num">Amount</th>
-          <th>Category</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r, i) => (
-          <tr key={`${r.date}-${r.description}-${i}`}>
-            <td>{longDate(r.date)}</td>
-            <td>{r.description}</td>
-            <td className={`num ${r.amount >= 0 ? "amt-out" : "amt-in"}`}>
-              {currency(Math.abs(r.amount))}
-            </td>
-            <td>
-              <span className={r.category === "Transfers" ? "tag status-transfer" : "muted"}>
-                {r.category}
-              </span>
-            </td>
-            <td>
-              <span className={`tag status-${r.status}`}>{r.status}</span>
-              {r.existing_amount != null && (
-                <span className="muted"> was {currency(Math.abs(r.existing_amount))}</span>
-              )}
-            </td>
+    <div className="table-wrap">
+      <table className="table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Description</th>
+            <th className="num">Amount</th>
+            <th>Category</th>
+            <th>Status</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={`${r.date}-${r.description}-${i}`}>
+              <td>{longDate(r.date)}</td>
+              <td>{r.description}</td>
+              <td className={`num ${r.amount >= 0 ? "amt-out" : "amt-in"}`}>
+                {signedAmount(r.amount)}
+              </td>
+              <td>
+                <span className={r.category === "Transfers" ? "tag status-transfer" : "muted"}>
+                  {r.category}
+                </span>
+              </td>
+              <td>
+                <span className={`tag status-${r.status}`}>{r.status}</span>
+                {r.existing_amount != null && (
+                  // Signed, so a charge stored as a refund (or vice versa) shows up.
+                  <span className="muted"> was {signedAmount(r.existing_amount)}</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -101,7 +109,16 @@ export default function Import() {
   }, []);
 
   useEffect(() => {
-    void api.importPresets().then(setPresets).catch(() => setPresets([]));
+    void api
+      .importPresets()
+      .then((loaded) => {
+        setPresets(loaded);
+        // The "rbc" default is a guess until the list arrives; keep the choice
+        // only if it's a real preset.
+        const keys = loaded.map((p) => p.key);
+        if (keys.length > 0) setPreset((cur) => (keys.includes(cur) ? cur : keys[0]));
+      })
+      .catch(() => setPresets([]));
     loadStatus();
   }, [loadStatus]);
 
@@ -132,7 +149,7 @@ export default function Import() {
       setPreview(await api.previewImport(chosen, accountId, preset));
     } catch (e) {
       setPreview(null);
-      setError(String(e));
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }
@@ -152,20 +169,29 @@ export default function Import() {
       setResult(committed);
       setPreview(null);
       setFile(null);
+      clearFileInput();
       setIncludeConflicts(false);
       loadStatus();
       await refresh();
     } catch (e) {
-      setError(String(e));
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }
+  }
+
+  // The file input is uncontrolled; clearing `file` alone leaves the old name
+  // showing, and picking the same file again wouldn't fire onChange.
+  const fileInput = useRef<HTMLInputElement>(null);
+  function clearFileInput() {
+    if (fileInput.current) fileInput.current.value = "";
   }
 
   function reset() {
     setPreview(null);
     setResult(null);
     setFile(null);
+    clearFileInput();
     setError(null);
     setIncludeConflicts(false);
   }
@@ -248,6 +274,7 @@ export default function Import() {
           <label>
             File
             <input
+              ref={fileInput}
               type="file"
               accept=".csv,.xlsx,.xlsm,text/csv"
               disabled={busy}
@@ -365,18 +392,27 @@ export default function Import() {
                     Kind
                     <select
                       value={
-                        ACCOUNT_KINDS.find((k) => k.type === c.account_type)?.key ??
-                        "chequing"
+                        // Type alone can't tell Savings from Chequing (both
+                        // "depository"), so match the subtype first.
+                        (
+                          ACCOUNT_KINDS.find(
+                            (k) => k.type === c.account_type && k.subtype === c.account_subtype,
+                          ) ?? ACCOUNT_KINDS.find((k) => k.type === c.account_type)
+                        )?.key ?? "chequing"
                       }
                       onChange={async (e) => {
                         const kind = ACCOUNT_KINDS.find((k) => k.key === e.target.value);
                         if (!kind) return;
-                        await api.updateManualAccount(c.account_id, {
-                          type: kind.type,
-                          subtype: kind.subtype,
-                        });
-                        loadStatus();
-                        await refresh();
+                        try {
+                          await api.updateManualAccount(c.account_id, {
+                            type: kind.type,
+                            subtype: kind.subtype,
+                          });
+                          loadStatus();
+                          await refresh();
+                        } catch (err) {
+                          setError(`Couldn't change the account kind: ${errorText(err)}`);
+                        }
                       }}
                     >
                       {ACCOUNT_KINDS.map((k) => (
@@ -403,28 +439,30 @@ export default function Import() {
         {batches.length === 0 ? (
           <EmptyState>Nothing imported yet.</EmptyState>
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>File</th>
-                <th>Period</th>
-                <th className="num">Imported</th>
-                <th className="num">Duplicate</th>
-                <th className="num">Conflicting</th>
-              </tr>
-            </thead>
-            <tbody>
-              {batches.map((b) => (
-                <tr key={b.id}>
-                  <td>{b.filename}</td>
-                  <td>{rangeLabel({ start: b.period_start, end: b.period_end })}</td>
-                  <td className="num">{b.rows_imported}</td>
-                  <td className="num">{b.rows_duplicate}</td>
-                  <td className="num">{b.rows_conflicting}</td>
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>File</th>
+                  <th>Period</th>
+                  <th className="num">Imported</th>
+                  <th className="num">Duplicate</th>
+                  <th className="num">Conflicting</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {batches.map((b) => (
+                  <tr key={b.id}>
+                    <td>{b.filename}</td>
+                    <td>{rangeLabel({ start: b.period_start, end: b.period_end })}</td>
+                    <td className="num">{b.rows_imported}</td>
+                    <td className="num">{b.rows_duplicate}</td>
+                    <td className="num">{b.rows_conflicting}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
     </>

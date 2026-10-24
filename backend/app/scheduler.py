@@ -3,9 +3,9 @@ configured, automatic Plaid transaction sync).
 
 Kept tiny: one module-level BackgroundScheduler started/stopped by the FastAPI
 lifespan. SQLite access from the job thread is fine because the engine is built
-with check_same_thread=False (see database.py). Note: this runs in-process, so an
-always-on deployment (e.g. a Reserved VM) is required for these jobs to fire —
-an autoscale/scale-to-zero deployment would suspend them."""
+with check_same_thread=False (see database.py). Note: this runs in-process, so it
+only fires on an always-on host. A scale-to-zero deployment (Cloud Run) suspends
+it; there the daily job (`python -m app.jobs`) does this work instead."""
 import logging
 
 from apscheduler.schedulers.background import BackgroundScheduler

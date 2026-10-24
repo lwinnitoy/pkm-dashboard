@@ -28,6 +28,3 @@ export const CATEGORY_COLORS = [
 export function categoryColor(i: number): string {
   return CATEGORY_COLORS[i % CATEGORY_COLORS.length];
 }
-
-// Shared axis tick styling.
-export const AXIS_TICK = { fontSize: 11, fill: CHART.axis } as const;

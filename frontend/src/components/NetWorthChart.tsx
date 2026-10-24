@@ -41,7 +41,7 @@ export default function NetWorthChart({ data }: { data: NetWorthPoint[] }) {
             minTickGap={28}
           />
           <YAxis
-            tickFormatter={currencyCompact}
+            tickFormatter={(v: number) => currencyCompact(v)}
             tick={{ fontSize: 11 }}
             tickLine={false}
             axisLine={false}

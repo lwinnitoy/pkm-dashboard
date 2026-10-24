@@ -1,0 +1,24 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+sqlalchemy==2.0.36
+# SQLAlchemy needs greenlet only on some CPUs (x86_64/aarch64, not Apple's arm64),
+# so a lock compiled on a Mac would leave it out and the hashed install in the
+# Linux image and CI would fail. Listed explicitly so every lock includes it.
+greenlet
+pydantic==2.10.4
+pydantic-settings==2.7.1
+plaid-python==29.0.0
+certifi==2026.7.22
+cryptography==50.0.0
+python-dotenv==1.0.1
+apscheduler==3.11.0
+alembic==1.19.1
+itsdangerous==2.2.0
+python-multipart==0.0.20   # multipart/form-data, for statement file uploads
+openpyxl==3.1.5            # .xlsx statement exports
+PyYAML==6.0.3              # insight seed content (app/insights/content/*.yaml)
+
+# --- postgres (cloud DB) ---
+# Only needed when DATABASE_URL points at Postgres (e.g. Neon/Supabase); SQLite
+# needs no driver. Use a postgresql+psycopg:// URL to select this driver.
+psycopg[binary]==3.3.4

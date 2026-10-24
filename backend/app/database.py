@@ -14,7 +14,7 @@ _is_sqlite = DATABASE_URL.startswith("sqlite")
 # check_same_thread is a SQLite-only requirement for use across threads (e.g. the scheduler).
 connect_args = {"check_same_thread": False} if _is_sqlite else {}
 
-# Serverless Postgres (e.g. Neon on Replit) suspends when idle and drops open
+# Serverless Postgres (Neon) suspends when idle and drops open
 # connections; pool_pre_ping transparently discards a dead connection and opens a
 # fresh one instead of failing the request (psycopg AdminShutdown / closed conn).
 engine = create_engine(

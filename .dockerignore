@@ -16,3 +16,6 @@ docs
 .playwright-mcp
 statements
 **/download-transactions*.csv
+**/.pytest_cache
+backend/tests
+backend/requirements-dev*.txt
