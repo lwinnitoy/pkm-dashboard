@@ -36,9 +36,24 @@ gcloud projects add-iam-policy-binding "$PROJECT_ID" --condition=None \
 echo "==> bucket access: job writes and reads, the web app gets nothing"
 # objectCreator can add objects but not overwrite or delete them; objectViewer
 # lets the mount list the bucket and job.sh verify the file it just wrote.
-for role in roles/storage.objectCreator roles/storage.objectViewer; do
+# A just-created service account takes a minute or two to reach Cloud Storage,
+# which rejects it as "does not exist" until then; retry instead of failing.
+bind_bucket_role() {
+  local role=$1 attempt
+  for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+    if gcloud storage buckets add-iam-policy-binding "gs://$BUCKET" \
+        --member="serviceAccount:$JOB_SA" --role="$role" >/dev/null 2>&1; then
+      return 0
+    fi
+    echo "    $JOB_SA not visible to Cloud Storage yet; retrying in 10s ($attempt/12)"
+    sleep 10
+  done
+  # Last try without hiding the error, so a real problem is visible.
   gcloud storage buckets add-iam-policy-binding "gs://$BUCKET" \
     --member="serviceAccount:$JOB_SA" --role="$role" >/dev/null
+}
+for role in roles/storage.objectCreator roles/storage.objectViewer; do
+  bind_bucket_role "$role"
 done
 gcloud storage buckets remove-iam-policy-binding "gs://$BUCKET" \
   --member="serviceAccount:$RUN_SA" --role=roles/storage.objectAdmin >/dev/null 2>&1 || true
